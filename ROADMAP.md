@@ -33,6 +33,7 @@ From any buttnode's web UI, show all other buttnodes visible on the local networ
 
 - [ ] First-boot wizard (hostname confirmation, mode selection: Buttons vs Satellite)
 - [ ] `/status` JSON endpoint for scripting/monitoring
+- [ ] Make `full` variant opt-in on automated releases — add `build-full` boolean input to `release-action.yaml` so the full image is only built when explicitly requested, not on every Buttons version bump (currently doubles CI time)
 
 ---
 

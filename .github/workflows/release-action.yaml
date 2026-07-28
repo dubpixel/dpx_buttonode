@@ -91,6 +91,8 @@ jobs:
           fi
 
   # ── Matrix build across all supported boards ──────────────────────────────
+  # TODO: make 'full' optional — add a 'build-full' boolean input so full images
+  # are opt-in per release rather than always built (doubles CI time).
   build:
     needs: check-version
     if: needs.check-version.outputs.should-build == 'true'
