@@ -19,6 +19,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-07-28
+
+### Added
+- **Full image variant:** `full` builds include Bitfocus Companion (full) in addition to Buttons USB Relay
+  and Companion Satellite. `lite` builds are the existing behaviour (Buttons + Satellite only).
+- **`scripts/install-companion.sh`:** installs full Bitfocus Companion via official `companion-pi/install.sh`
+  (pre-built arm64 binary, no compile step, ~15-25 min). Adds `companion` user to `buttons` group for HID
+  access. Appends `COMPANION_VERSION` and `VARIANT=full` to `/etc/dpx-buttnode-release`.
+- **`variant` Packer variable:** `lite` (5 GB image) or `full` (8 GB image). Ternary expression controls
+  `target_image_size`. `VARIANT` written to `/etc/dpx-buttnode-release` on all builds.
+- **`variant` workflow input:** `armbian-builder.yaml` exposes `variant: lite|full` on both
+  `workflow_dispatch` and `workflow_call`. Passed to Packer.
+- **Variant in artifact name:** `{board}-dpx-buttnode-{ver}-{variant}-{commit}.img.gz`
+- **Release matrix expanded:** `release-action.yaml` builds both `lite` and `full` per board (4 artifacts for
+  2-board matrix).
+- **Companion mode in UI:** Mode tab now shows three buttons — Buttons / Satellite / Companion.
+  Companion button is disabled on Lite images (graceful degradation, detected via `/opt/companion` presence).
+  Mode card on Status page handles `companion` mode (amber colour, direct link to port 8000).
+- **Build info footer shows variant:** `dpx-buttnode v0.6.0 [full]` — companion version included when
+  `variant=full`.
+
+### Changed
+- `/etc/dpx-mode` now accepts `buttons`, `satellite`, or `companion`
+- POST `/mode` handler updated to map all three modes to their respective systemd service names
+
+---
+
 ## [0.5.0] - 2026-07-17
 
 ### Added

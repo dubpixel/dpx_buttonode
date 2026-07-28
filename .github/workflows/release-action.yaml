@@ -102,9 +102,13 @@ jobs:
         board:
           - rockpi-s
           - orangepizero3
+        variant:
+          - lite
+          - full
     uses: ./.github/workflows/armbian-builder.yaml
     with:
       armbian-board: ${{ matrix.board }}
+      variant: ${{ matrix.variant }}
     permissions:
       contents: read
 

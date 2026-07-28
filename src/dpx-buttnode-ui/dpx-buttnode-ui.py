@@ -27,10 +27,12 @@ DPX_NET_FILE   = NETWORKD_DIR / "05-dpx-eth.network"   # 05- beats Netplan's 10-
 DPX_NET_OLD    = NETWORKD_DIR / "10-dpx-eth.network"   # remove if exists (old name)
 NETPLAN_DIR    = Path("/etc/netplan")
 DPX_NETPLAN    = NETPLAN_DIR / "99-dpx-override.yaml"  # highest priority, beats armbian 10-
-MODE_FILE      = Path("/etc/dpx-mode")              # 'buttons' or 'satellite'
+MODE_FILE      = Path("/etc/dpx-mode")              # 'buttons', 'satellite', or 'companion'
 SAT_CONFIG     = Path("/etc/dpx-satellite.conf")    # our persistent satellite config
 SAT_BOOT_CFG   = Path("/boot/satellite-config")     # satellite's one-shot import file
 SATELLITE_API  = "http://localhost:9999"             # satellite REST API
+COMPANION_DIR  = Path("/opt/companion")              # present on full images only
+COMPANION_PORT = 8000                                # companion web UI port
 
 # ── TTL cache ──────────────────────────────────────────────────────────────────
 # Subprocess calls (systemctl, lsusb, avahi-browse) are expensive.
@@ -399,11 +401,14 @@ def page(content, tab="status", alert="", alert_cls="a-ok"):
         for t, u, n in tabs
     )
     bld = get_build_info()
+    variant_tag = bld.get("variant", "lite")
+    companion_part = f' &nbsp;&middot;&nbsp; companion {esc(bld["companion_version"])}' if variant_tag == "full" else ""
     footer = (
         f'<div class="footer">'
-        f'dpx-buttnode v{esc(bld["dpx_version"])}'
+        f'dpx-buttnode v{esc(bld["dpx_version"])} [{esc(variant_tag)}]'
         f' &nbsp;&middot;&nbsp; buttons {esc(bld["buttons_version"])}'
         f' &nbsp;&middot;&nbsp; satellite {esc(bld["satellite_version"])}'
+        f'{companion_part}'
         f' &nbsp;&middot;&nbsp; {esc(bld["git_branch"])}@{esc(bld["git_commit"])}'
         f' &nbsp;&middot;&nbsp; built {esc(bld["build_date"])}'
         f'</div>'
@@ -438,17 +443,22 @@ def render_status(alert="", alert_cls="a-ok"):
     usb     = get_usb_devices()
     mode    = get_dpx_mode()
     ss      = svc_active("satellite")
-    # Mode card: label + active service indicator + companion target if satellite
+    cs      = svc_active("companion")
+    # Mode card: label + active service indicator + detail line
     if mode == "satellite":
         sat_host, sat_port = get_satellite_config()
         mode_detail = f'<div style="font-size:11px;color:#8b949e;margin-top:4px">{esc(sat_host) or "unconfigured"}:{esc(sat_port)}</div>' if sat_host else '<div style="font-size:11px;color:#8b949e;margin-top:4px">companion not configured</div>'
         svc_label = f'<div class="val {"on" if ss else "off"}" style="font-size:13px">satellite {"active" if ss else "inactive"}</div>'
+    elif mode == "companion":
+        mode_detail = f'<div style="font-size:11px;color:#8b949e;margin-top:4px"><a href="http://{esc(get_ip())}:{COMPANION_PORT}" target="_blank" style="color:#e3b341">open :8000 ↗</a></div>'
+        svc_label = f'<div class="val {"on" if cs else "off"}" style="font-size:13px">companion {"active" if cs else "inactive"}</div>'
     else:
         mode_detail = ""
         svc_label   = f'<div class="val {"on" if bs else "off"}" style="font-size:13px">buttons {"active" if bs else "inactive"}</div>'
 
+    mode_color = {"buttons": "#3fb950", "satellite": "#58a6ff", "companion": "#e3b341"}.get(mode, "#3fb950")
     mode_card = f"""  <div class="card"><div class="lbl">Mode</div>
-    <div class="val" style="font-size:16px;font-weight:700;{'color:#3fb950' if mode=='buttons' else 'color:#58a6ff'}">{mode.upper()}</div>
+    <div class="val" style="font-size:16px;font-weight:700;color:{mode_color}">{mode.upper()}</div>
     {svc_label}
     {mode_detail}</div>"""
 
@@ -633,11 +643,16 @@ def render_nodes(alert="", alert_cls="a-ok"):
 # ── Mode helpers ───────────────────────────────────────────────────────────────
 
 def get_dpx_mode():
-    """Return current mode: 'buttons' or 'satellite'."""
+    """Return current mode: 'buttons', 'satellite', or 'companion'."""
     try:
         return MODE_FILE.read_text().strip()
     except Exception:
         return "buttons"
+
+
+def companion_installed():
+    """True if full Companion is installed (Full image variant)."""
+    return COMPANION_DIR.exists()
 
 
 RELEASE_FILE = Path("/etc/dpx-buttnode-release")
@@ -651,7 +666,8 @@ def _get_build_info_raw():
     Falls back to 'unknown' for any missing key.
     """
     info = {"dpx_version": "unknown", "buttons_version": "unknown",
-            "satellite_version": "unknown",
+            "satellite_version": "unknown", "companion_version": "unknown",
+            "variant": "lite",
             "git_branch": "unknown", "git_commit": "unknown", "build_date": "unknown"}
     try:
         for line in RELEASE_FILE.read_text().splitlines():
@@ -702,55 +718,67 @@ def render_mode(alert="", alert_cls="a-ok"):
     mode   = get_dpx_mode()
     bs     = svc_active("bitfocus-buttons-usb-relay")
     ss     = svc_active("satellite")
+    cs     = svc_active("companion")
     host, port = get_satellite_config()
+    has_companion = companion_installed()
+    ip = get_ip()
 
-    # Mode badge
-    if mode == "satellite":
-        badge_text  = "B — Companion Satellite"
-        badge_color = "#1f6feb"
-        switch_label = "← Switch to Buttons"
-        switch_target = "buttons"
-    else:
-        badge_text  = "A — Buttons USB Relay"
-        badge_color = "#2ea043"
-        switch_label = "Switch to Satellite →"
-        switch_target = "satellite"
+    # Colour + label per mode
+    MODE_META = {
+        "buttons":   ("#2ea043", "A — Buttons USB Relay"),
+        "satellite": ("#1f6feb", "B — Companion Satellite"),
+        "companion": ("#9e6a03", "C — Bitfocus Companion"),
+    }
+    badge_color, badge_text = MODE_META.get(mode, MODE_META["buttons"])
+
+    def mode_btn(target, label, active):
+        if active:
+            return f'<span style="font-size:12px;color:#8b949e;padding:8px 14px;border:1px solid #30363d;border-radius:6px;display:inline-block">{label} ✓</span>'
+        disabled = "" if (target != "companion" or has_companion) else ' disabled title="Full image required"'
+        return f'<button type="submit" form="mode-form-{target}" class="btn btn-p" style="font-size:12px"{disabled}>{label}</button>'
+
+    btns = "".join([
+        f'<form id="mode-form-buttons" method="POST" action="/mode" style="display:inline;margin-right:6px"><input type="hidden" name="new_mode" value="buttons">{mode_btn("buttons", "Buttons", mode=="buttons")}</form>',
+        f'<form id="mode-form-satellite" method="POST" action="/mode" style="display:inline;margin-right:6px"><input type="hidden" name="new_mode" value="satellite">{mode_btn("satellite", "Satellite", mode=="satellite")}</form>',
+        f'<form id="mode-form-companion" method="POST" action="/mode" style="display:inline"><input type="hidden" name="new_mode" value="companion">{mode_btn("companion", "Companion", mode=="companion")}</form>' if has_companion else
+        f'<span style="font-size:12px;color:#484f58;padding:8px 14px;border:1px dashed #30363d;border-radius:6px;display:inline-block" title="Not installed — Full image required">Companion (Full only)</span>',
+    ])
+
+    companion_link = (
+        f'<p class="note" style="margin-top:10px">Companion web UI: '
+        f'<a href="http://{esc(ip)}:{COMPANION_PORT}" target="_blank">http://{esc(ip)}:{COMPANION_PORT}</a></p>'
+        if mode == "companion" and cs else ""
+    )
 
     bs_badge = '<span class="badge badge-on">active</span>' if bs else '<span class="badge badge-off">inactive</span>'
     ss_badge = '<span class="badge badge-on">active</span>' if ss else '<span class="badge badge-off">inactive</span>'
+    cs_badge = ('<span class="badge badge-on">active</span>' if cs else '<span class="badge badge-off">inactive</span>') if has_companion else '<span class="badge badge-off">not installed</span>'
 
     body = f"""
 <div class="sec">
   <h2>Active Mode</h2>
   <div style="background:#161b22;border:2px solid {badge_color};border-radius:10px;
-              padding:18px 20px;margin-bottom:20px;display:flex;
-              align-items:center;justify-content:space-between;gap:12px">
-    <div>
-      <div style="font-size:20px;font-weight:700;color:#f0f6ff;margin-bottom:6px">{badge_text}</div>
-      <div style="font-size:12px;color:#8b949e">/etc/dpx-mode = <code>{esc(mode)}</code></div>
-    </div>
-    <form method="POST" action="/mode" style="margin:0">
-      <input type="hidden" name="new_mode" value="{switch_target}">
-      <button type="submit" class="btn btn-p">{switch_label}</button>
-    </form>
+              padding:18px 20px;margin-bottom:16px">
+    <div style="font-size:20px;font-weight:700;color:#f0f6ff;margin-bottom:6px">{badge_text}</div>
+    <div style="font-size:12px;color:#8b949e;margin-bottom:14px">/etc/dpx-mode = <code>{esc(mode)}</code></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">{btns}</div>
+    {companion_link}
   </div>
 </div>
 <div class="sec">
   <h2>Service Status</h2>
   <div class="grid">
-    <div class="card">
-      <div class="lbl">Buttons USB Relay</div>
-      <div class="val">bitfocus-buttons-usb-relay {bs_badge}</div>
-    </div>
-    <div class="card">
-      <div class="lbl">Companion Satellite</div>
-      <div class="val">satellite {ss_badge}</div>
-    </div>
+    <div class="card"><div class="lbl">Buttons USB Relay</div>
+      <div class="val" style="font-size:13px">bitfocus-buttons-usb-relay {bs_badge}</div></div>
+    <div class="card"><div class="lbl">Companion Satellite</div>
+      <div class="val" style="font-size:13px">satellite {ss_badge}</div></div>
+    <div class="card"><div class="lbl">Companion (Full)</div>
+      <div class="val" style="font-size:13px">companion {cs_badge}</div></div>
   </div>
 </div>
 <div class="sec">
-  <h2>Companion Server Config</h2>
-  <p class="note">Set the IP and port of your Bitfocus Companion server (TCP 16622).<br>
+  <h2>Companion Server Config <span style="font-size:11px;font-weight:400;color:#8b949e">(Satellite mode)</span></h2>
+  <p class="note">IP and port of your Bitfocus Companion server (TCP 16622).<br>
     Saved to <code>/etc/dpx-satellite.conf</code>. Applied on next Satellite start.</p>
   <form method="POST" action="/satellite-config">
     <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
@@ -1043,15 +1071,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # ── /mode ────────────────────────────────────────────────────────
         elif path == "/mode":
             new_mode = params.get("new_mode", "").strip()
-            if new_mode not in ("buttons", "satellite"):
+            valid = {"buttons", "satellite", "companion"}
+            if new_mode not in valid:
                 self.html(render_mode(alert="✗ Invalid mode", alert_cls="a-err"))
+                return
+            if new_mode == "companion" and not companion_installed():
+                self.html(render_mode(alert="✗ Full Companion not installed — flash the Full image variant", alert_cls="a-err"))
                 return
             current = get_dpx_mode()
             if new_mode == current:
                 self.redir("/mode")
                 return
-            old_svc = "bitfocus-buttons-usb-relay" if current == "buttons" else "satellite"
-            new_svc = "satellite" if new_mode == "satellite" else "bitfocus-buttons-usb-relay"
+            SVC_MAP = {
+                "buttons":   "bitfocus-buttons-usb-relay",
+                "satellite": "satellite",
+                "companion": "companion",
+            }
+            old_svc = SVC_MAP.get(current, "bitfocus-buttons-usb-relay")
+            new_svc = SVC_MAP[new_mode]
             # If switching TO satellite, stage the config before starting
             if new_mode == "satellite":
                 host, port = get_satellite_config()
@@ -1068,9 +1105,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ))
                 return
             MODE_FILE.write_text(new_mode + "\n")
-            label = "Companion Satellite" if new_mode == "satellite" else "Buttons USB Relay"
+            LABELS = {"buttons": "Buttons USB Relay", "satellite": "Companion Satellite", "companion": "Bitfocus Companion"}
             self.html(render_mode(
-                alert=f"✓ Switched to {label}",
+                alert=f"✓ Switched to {LABELS[new_mode]}",
                 alert_cls="a-ok",
             ))
 

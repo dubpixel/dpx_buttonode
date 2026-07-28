@@ -47,11 +47,17 @@ variable "build_date" {
   description = "ISO date this image was built (UTC)"
 }
 
+variable "variant" {
+  type    = string
+  default = "lite"
+  description = "Image variant: 'lite' (Buttons + Satellite) or 'full' (+ full Companion)"
+}
+
 source "arm-image" "armbian" {
-  iso_checksum    = "none"
-  iso_url         = var.url
-  target_image_size = 5000000000
-  output_filename = "output-dpx-buttnode/armbian-dpx-buttnode.img"
+  iso_checksum      = "none"
+  iso_url           = var.url
+  target_image_size = var.variant == "full" ? 8000000000 : 5000000000
+  output_filename   = "output-dpx-buttnode/armbian-dpx-buttnode.img"
   qemu_binary     = "qemu-aarch64-static"
   image_mounts    = ["/"]
 
@@ -112,6 +118,8 @@ build {
       "echo 'GIT_BRANCH=${var.git_branch}' >> /etc/dpx-buttnode-release",
       "echo 'GIT_COMMIT=${var.git_commit}' >> /etc/dpx-buttnode-release",
       "echo 'BUILD_DATE=${var.build_date}' >> /etc/dpx-buttnode-release",
+      # Lite variant flag — install-companion.sh overwrites VARIANT to 'full' if run
+      "echo 'VARIANT=${var.variant}' >> /etc/dpx-buttnode-release",
     ]
   }
 
@@ -141,6 +149,23 @@ build {
     inline = [
       "chmod +x /tmp/install-satellite.sh",
       "/tmp/install-satellite.sh"
+    ]
+  }
+
+  # ── Full variant only: install Bitfocus Companion ──────────────────────────
+  # Skipped on lite builds. Companion is a pre-built arm64 download (~500MB-2GB).
+  # Adds ~15-25 min to build time (download + extract, no compile step).
+  provisioner "file" {
+    source      = "scripts/install-companion.sh"
+    destination = "/tmp/install-companion.sh"
+  }
+
+  provisioner "shell" {
+    execute_command = "chmod +x {{ .Path }}; {{ .Vars }} su root -c {{ .Path }}"
+    inline_shebang  = "/bin/bash -e"
+    inline = [
+      "chmod +x /tmp/install-companion.sh",
+      "if [ '${var.variant}' = 'full' ]; then /tmp/install-companion.sh; else echo '==> Skipping Companion install (lite variant)'; fi"
     ]
   }
 }
