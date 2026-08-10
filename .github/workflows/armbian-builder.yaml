@@ -405,5 +405,5 @@ jobs:
         with:
           name: ${{ steps.meta.outputs.artifact-name }}
           path: ${{ env.COMPRESSED_IMAGE }}
-          retention-days: 7
+          retention-days: 3
           if-no-files-found: error
