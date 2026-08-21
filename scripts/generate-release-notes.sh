@@ -20,7 +20,7 @@ OUT="/tmp/release-notes.md"
 BOARD_LIST=""
 for f in "$ASSETS_DIR"/*.img.gz; do
     [ -f "$f" ] || continue
-    BOARD=$(basename "$f" | sed 's/-dpx-buttnode-.*//') 
+    BOARD=$(basename "$f" | sed 's/-dpx-buttonode-.*//') 
     FILE=$(basename "$f")
     BOARD_LIST="${BOARD_LIST}- \`${BOARD}\` — \`${FILE}\`
 "
@@ -33,7 +33,7 @@ Flash-ready Armbian images with [Bitfocus Buttons USB Relay](https://bitfocus.io
 
 | Component | Version |
 |---|---|
-| dpx-buttnode pipeline | \`${BUILD_VERSION}\` |
+| dpx-buttonode pipeline | \`${BUILD_VERSION}\` |
 | Buttons USB Relay | \`${VERSION}\` |
 | Companion Satellite | \`${SAT_VERSION}\` |
 | Built from | \`${GIT_BRANCH}@${GIT_COMMIT}\` |

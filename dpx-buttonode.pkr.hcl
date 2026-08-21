@@ -26,7 +26,7 @@ variable "deb_path" {
 variable "dpx_version" {
   type    = string
   default = "dev"
-  description = "dpx-buttnode project version (from VERSION file)"
+  description = "dpx-buttonode project version (from VERSION file)"
 }
 
 variable "git_branch" {
@@ -57,7 +57,7 @@ source "arm-image" "armbian" {
   iso_checksum      = "none"
   iso_url           = var.url
   target_image_size = var.variant == "full" ? 8000000000 : 5000000000
-  output_filename   = "output-dpx-buttnode/armbian-dpx-buttnode.img"
+  output_filename   = "output-dpx-buttonode/armbian-dpx-buttonode.img"
   qemu_binary     = "qemu-aarch64-static"
   image_mounts    = ["/"]
 
@@ -88,8 +88,8 @@ build {
 
   # Copy the device config web UI (installed to /usr/local/bin by install-buttons.sh)
   provisioner "file" {
-    source      = "src/dpx-buttnode-ui/dpx-buttnode-ui.py"
-    destination = "/tmp/dpx-buttnode-ui.py"
+    source      = "src/dpx-buttonode-ui/dpx-buttonode-ui.py"
+    destination = "/tmp/dpx-buttonode-ui.py"
   }
 
   provisioner "file" {
@@ -104,22 +104,22 @@ build {
       "rm -f /root/.not_logged_in_yet",
 
       # Set a placeholder hostname — dpx-set-hostname.service replaces this
-      # with dpx-buttnode-XXXX (MAC-derived) on first boot.
-      "echo dpx-buttnode > /etc/hostname",
-      "sed -i \"s/127.0.1.1.*/127.0.1.1\\tdpx-buttnode/\" /etc/hosts || true",
+      # with dpx-buttonode-XXXX (MAC-derived) on first boot.
+      "echo dpx-buttonode > /etc/hostname",
+      "sed -i \"s/127.0.1.1.*/127.0.1.1\\tdpx-buttonode/\" /etc/hosts || true",
 
       # SSH enabled for remote access and debugging
       # Login: root / 1234  (Armbian forces a password change on first login)
       "systemctl enable ssh || true",
 
-      # Write build metadata — readable by dpx-buttnode-ui Status page
-      "echo 'DPX_VERSION=${var.dpx_version}' > /etc/dpx-buttnode-release",
-      "echo 'BUTTONS_VERSION=${var.build}' >> /etc/dpx-buttnode-release",
-      "echo 'GIT_BRANCH=${var.git_branch}' >> /etc/dpx-buttnode-release",
-      "echo 'GIT_COMMIT=${var.git_commit}' >> /etc/dpx-buttnode-release",
-      "echo 'BUILD_DATE=${var.build_date}' >> /etc/dpx-buttnode-release",
+      # Write build metadata — readable by dpx-buttonode-ui Status page
+      "echo 'DPX_VERSION=${var.dpx_version}' > /etc/dpx-buttonode-release",
+      "echo 'BUTTONS_VERSION=${var.build}' >> /etc/dpx-buttonode-release",
+      "echo 'GIT_BRANCH=${var.git_branch}' >> /etc/dpx-buttonode-release",
+      "echo 'GIT_COMMIT=${var.git_commit}' >> /etc/dpx-buttonode-release",
+      "echo 'BUILD_DATE=${var.build_date}' >> /etc/dpx-buttonode-release",
       # Lite variant flag — install-companion.sh overwrites VARIANT to 'full' if run
-      "echo 'VARIANT=${var.variant}' >> /etc/dpx-buttnode-release",
+      "echo 'VARIANT=${var.variant}' >> /etc/dpx-buttonode-release",
     ]
   }
 
@@ -142,7 +142,7 @@ build {
 
   # Install Companion Satellite (headless, stable build — runs as root)
   # Downloads from GitHub inside the chroot; requires internet access.
-  # Installs but leaves disabled by default (dpx-buttnode-ui Mode tab activates it).
+  # Installs but leaves disabled by default (dpx-buttonode-ui Mode tab activates it).
   provisioner "shell" {
     execute_command = "chmod +x {{ .Path }}; {{ .Vars }} su root -c {{ .Path }}"
     inline_shebang  = "/bin/bash -e"

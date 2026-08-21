@@ -40,10 +40,10 @@ fp-info-cache
 # kicad local profile
 *.kicad_prl
 
-##########------ dpx-buttnode ------######
+##########------ dpx-buttonode ------######
 # Build outputs
 artifacts/
-output-dpx-buttnode/
+output-dpx-buttonode/
 build/
 
 # Downloaded packages (never commit these — use the mirror release instead)

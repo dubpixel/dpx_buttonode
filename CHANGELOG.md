@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Project renamed `buttnode` → `buttonode`** (repo, package, filenames, docs, CI). Full spelling reads
+  cleaner and avoids the Bluetooth ("BT node") misread. GitHub repo rename + remote URL update pending as a
+  separate step.
+
 ### Added
-- `update-docs` skill (`.github/skills/update-docs/SKILL.md`) — full documentation audit workflow for dpx_buttnode
+- `update-docs` skill (`.github/skills/update-docs/SKILL.md`) — full documentation audit workflow for dpx_buttonode
 - README: `images/front.png` hardware photo added between hero section and TOC
 - README: UI screenshots grid (`001–006_*.jpe`) replacing placeholder image paths in Usage section
 - README: 📸 Screenshots quick link added next to 3D Case link in hero
-- README: `#dpx-buttnode-ui` section promoted to top-level heading so TOC and Screenshots link anchor correctly
+- README: `#dpx-buttonode-ui` section promoted to top-level heading so TOC and Screenshots link anchor correctly
 - README: satisfied `<!--todo-->` comments removed
 - AGENTS.md: `html/` folder added to architecture table for UI preview pages
 - ROADMAP.md: checkboxes added to planned items; Nodes tab marked as shipped
@@ -26,18 +31,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and Companion Satellite. `lite` builds are the existing behaviour (Buttons + Satellite only).
 - **`scripts/install-companion.sh`:** installs full Bitfocus Companion via official `companion-pi/install.sh`
   (pre-built arm64 binary, no compile step, ~15-25 min). Adds `companion` user to `buttons` group for HID
-  access. Appends `COMPANION_VERSION` and `VARIANT=full` to `/etc/dpx-buttnode-release`.
+  access. Appends `COMPANION_VERSION` and `VARIANT=full` to `/etc/dpx-buttonode-release`.
 - **`variant` Packer variable:** `lite` (5 GB image) or `full` (8 GB image). Ternary expression controls
-  `target_image_size`. `VARIANT` written to `/etc/dpx-buttnode-release` on all builds.
+  `target_image_size`. `VARIANT` written to `/etc/dpx-buttonode-release` on all builds.
 - **`variant` workflow input:** `armbian-builder.yaml` exposes `variant: lite|full` on both
   `workflow_dispatch` and `workflow_call`. Passed to Packer.
-- **Variant in artifact name:** `{board}-dpx-buttnode-{ver}-{variant}-{commit}.img.gz`
+- **Variant in artifact name:** `{board}-dpx-buttonode-{ver}-{variant}-{commit}.img.gz`
 - **Release matrix expanded:** `release-action.yaml` builds both `lite` and `full` per board (4 artifacts for
   2-board matrix).
 - **Companion mode in UI:** Mode tab now shows three buttons — Buttons / Satellite / Companion.
   Companion button is disabled on Lite images (graceful degradation, detected via `/opt/companion` presence).
   Mode card on Status page handles `companion` mode (amber colour, direct link to port 8000).
-- **Build info footer shows variant:** `dpx-buttnode v0.6.0 [full]` — companion version included when
+- **Build info footer shows variant:** `dpx-buttonode v0.6.0 [full]` — companion version included when
   `variant=full`.
 
 ### Changed
@@ -49,20 +54,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.0] - 2026-07-17
 
 ### Added
-- **Project rename:** `dpx_buttons_relay_armbian` → **`dpx-buttnode`** — repo name, artifact names,
+- **Project rename:** `dpx_buttons_relay_armbian` → **`dpx-buttonode`** — repo name, artifact names,
   release tags, workflow names, and all OUR identifiers updated. Bitfocus package names unchanged.
-- **`dpx-node-ui` → `dpx-buttnode-ui`:** service, binary path, web page title, and avahi XML
-  file renamed. mDNS service type `_dpx-buttnode._tcp` unchanged.
+- **`dpx-node-ui` → `dpx-buttonode-ui`:** service, binary path, web page title, and avahi XML
+  file renamed. mDNS service type `_dpx-buttonode._tcp` unchanged.
 - **Companion Satellite A/B mode:** Companion Satellite (headless) is now installed alongside
   Buttons USB Relay. Both are installed at image build time; only one runs at a time.
   - Default mode on first flash: **Buttons USB Relay** (satellite installed but disabled)
   - `scripts/install-satellite.sh` — installs Companion Satellite using the official install
     script (`pi-image/install.sh`) inside the Packer chroot; leaves `satellite.service` disabled;
     adds `satellite` user to `buttons` group for HID device access (Stream Deck udev fix)
-  - `dpx-buttnode.pkr.hcl` — two new provisioners: copy + run `install-satellite.sh`
+  - `dpx-buttonode.pkr.hcl` — two new provisioners: copy + run `install-satellite.sh`
   - Mode persistence: `/etc/dpx-mode` stores `buttons` or `satellite` across reboots
   - Mode switching via `systemctl enable/disable` on each service
-- **Mode tab in `dpx-buttnode-ui`:** new "Mode" tab in the web UI for A/B switching
+- **Mode tab in `dpx-buttonode-ui`:** new "Mode" tab in the web UI for A/B switching
   - Large mode badge (BUTTONS / SATELLITE) with colour coding
   - Service status for the active service
   - Switch button: stops+disables current service, enables+starts the other
@@ -77,19 +82,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mode-switch commands, Companion configuration instructions
 - **Favicon:** `images/fav_icon.png` served at `/favicon.png` and `/favicon.ico` on port 8080;
   provisioned into image via Packer; installed to `/usr/local/bin/fav_icon.png`
-- **Build metadata baked into image:** Packer writes `/etc/dpx-buttnode-release` containing
+- **Build metadata baked into image:** Packer writes `/etc/dpx-buttonode-release` containing
   `DPX_VERSION`, `BUTTONS_VERSION`, `SATELLITE_VERSION`, `GIT_BRANCH`, `GIT_COMMIT`, `BUILD_DATE`;
   `install-satellite.sh` appends `SATELLITE_VERSION` after build
 - **Build info footer in web UI:** every page shows a slim footer bar:
-  `dpx-buttnode v{ver} · buttons {ver} · satellite {ver} · {branch}@{commit} · built {date}`
+  `dpx-buttonode v{ver} · buttons {ver} · satellite {ver} · {branch}@{commit} · built {date}`
 - **Build info in release notes:** GitHub Release body includes a versions table
-  (dpx-buttnode, Buttons, Satellite, branch@commit)
+  (dpx-buttonode, Buttons, Satellite, branch@commit)
 
 ### Changed
-- Artifact filename format: `{board}-dpx-buttnode-{dpx_version}-{branch}-{commit}.img.gz`
+- Artifact filename format: `{board}-dpx-buttonode-{dpx_version}-{branch}-{commit}.img.gz`
   (branch + commit SHA appended; Buttons version removed from filename — it's in the UI footer and release notes)
-- Release title format: `dpx-buttnode v{dpx_version} — Buttons {buttons_version}`
-  (was `dpx-buttnode {buttons_version} (build {dpx_version})`)
+- Release title format: `dpx-buttonode v{dpx_version} — Buttons {buttons_version}`
+  (was `dpx-buttonode {buttons_version} (build {dpx_version})`)
 - Satellite `package.json` path corrected to `/opt/companion-satellite/satellite/package.json`
 
 ---
@@ -97,11 +102,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] - 2026-07-16
 
 ### Added
-- **Dynamic hostname:** `dpx-set-hostname.service` sets hostname to `dpx-buttnode-XXXX` (last 4 hex
+- **Dynamic hostname:** `dpx-set-hostname.service` sets hostname to `dpx-buttonode-XXXX` (last 4 hex
   chars of primary Ethernet MAC, uppercase) on first boot. Reads MAC from `/sys/class/net/<iface>/type`
   (kernel sysfs, available before network stack starts). Ordered `Before=network.target avahi-daemon.service`
   so avahi reads the correct hostname on first start.
-- **`dpx-buttnode-ui` web UI** on port 8080 — pure Python 3 stdlib, zero extra packages.
+- **`dpx-buttonode-ui` web UI** on port 8080 — pure Python 3 stdlib, zero extra packages.
   Tabs: Status, Hostname, Network, Devices, Nodes.
   - **Hostname:** `hostnamectl` + `/etc/hosts` + avahi reload
   - **Network:** DHCP ↔ static. Works on Armbian with Netplan + systemd-networkd.
@@ -109,9 +114,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     deletes the conflicting `/run/systemd/network/10-netplan-all-eth-interfaces.network`,
     then restarts networkd — the only approach that reliably beats Netplan's DHCP wildcard.
   - **Devices:** USB device list, Stream Deck USB power cycle (unbind/rebind port), Buttons service restart
-  - **Nodes:** `avahi-browse _dpx-buttnode._tcp` discovers all other buttnodes on the LAN with links to their UIs
+  - **Nodes:** `avahi-browse _dpx-buttonode._tcp` discovers all other buttonodes on the LAN with links to their UIs
 - `avahi-daemon.service` drop-in: `After=network-online.target` so mDNS announces on the correct IP after boot
-- `_dpx-buttnode._tcp` mDNS service registration so all units appear in the Nodes tab
+- `_dpx-buttonode._tcp` mDNS service registration so all units appear in the Nodes tab
 
 ### Fixed
 - Previous dynamic hostname (`41f433a`) used `After=network-pre.target` + fragile awk — replaced
@@ -125,13 +130,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.0] - 2026-07-15
 
 ### Added
-- Dynamic hostname at first boot: `dpx-buttnode-XXXX` derived from last 4 hex chars of MAC address
+- Dynamic hostname at first boot: `dpx-buttonode-XXXX` derived from last 4 hex chars of MAC address
 - `dpx-set-hostname.service` systemd oneshot service handles hostname assignment
 - Secure root password baked in via `ROOT_PASSWORD` GitHub Secret (never in code)
 - `ROOT_PASSWORD` secret properly chained through `workflow_call` to Packer build
 - `custom-board` free-text input on `armbian-builder.yaml` — build any board not in dropdown
 - `publish-release.yaml` workflow — re-publish a release from existing build artifacts without recompiling
-- Release tags now include pipeline version: `dpx-buttnode-X.Y.Z-buildA.B.C`
+- Release tags now include pipeline version: `dpx-buttonode-X.Y.Z-buildA.B.C`
 - `force=true` on release workflow deletes and recreates the same tag; normal runs never overwrite
 - Orange Pi Zero 3 added to release matrix
 - Full 150+ Armbian board list in manual dispatch dropdown
@@ -171,7 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/upload-mirror.sh` — one-command helper to upload new Bitfocus packages to the mirror release
 - `scripts/download-buttons.sh` — downloads package from mirror release using built-in `GITHUB_TOKEN`
 - `scripts/install-buttons.sh` — installs `.deb` inside Armbian chroot, enables `avahi-daemon` for mDNS discovery
-- `dpx-buttnode.pkr.hcl` — Packer build definition targeting ARM64 Armbian images
+- `dpx-buttonode.pkr.hcl` — Packer build definition targeting ARM64 Armbian images
 - Initial support for Bitfocus Buttons USB Relay Headless v0.1.0-beta.4
 
 ---

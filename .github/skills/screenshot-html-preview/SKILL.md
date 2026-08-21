@@ -1,10 +1,10 @@
 ---
 name: screenshot-html-preview
-description: 'Extract HTML from dpx-buttnode-ui.py and take precise full-content screenshots. Use when: updating the web UI Python source and need to regenerate HTML previews and screenshots, screenshotting the dpx-buttnode-ui preview pages, capturing updated HTML mockups. Covers full workflow: CSS/render function extraction → static HTML generation → pixel-accurate screenshots saved to images/.'
+description: 'Extract HTML from dpx-buttonode-ui.py and take precise full-content screenshots. Use when: updating the web UI Python source and need to regenerate HTML previews and screenshots, screenshotting the dpx-buttonode-ui preview pages, capturing updated HTML mockups. Covers full workflow: CSS/render function extraction → static HTML generation → pixel-accurate screenshots saved to images/.'
 argument-hint: 'Optional: specific tab(s) to regenerate, e.g. "mode devices". Omit to redo all 6.'
 ---
 
-# dpx-buttnode-ui Preview & Screenshot Skill
+# dpx-buttonode-ui Preview & Screenshot Skill
 
 Full pipeline: Python source → static HTML mocks → pixel-accurate screenshots → `images/`.
 
@@ -30,7 +30,7 @@ Full pipeline: Python source → static HTML mocks → pixel-accurate screenshot
 
 ## Part 1 — Regenerate HTML Previews
 
-Run this when `src/dpx-buttnode-ui/dpx-buttnode-ui.py` changes.
+Run this when `src/dpx-buttonode-ui/dpx-buttonode-ui.py` changes.
 
 1. Read the Python file — extract `CSS`, `page()`, and the six `render_*()` functions.  
    See [references/mock-data.md](./references/mock-data.md) for exact line ranges.
@@ -48,12 +48,12 @@ Run this when `src/dpx-buttnode-ui/dpx-buttnode-ui.py` changes.
 
 | Tab | File |
 |---|---|
-| Status | `html/dpx-buttnode-ui-preview.html` |
-| Hostname | `html/dpx-buttnode-ui-hostname.html` |
-| Network | `html/dpx-buttnode-ui-network.html` |
-| Devices | `html/dpx-buttnode-ui-devices.html` |
-| Nodes | `html/dpx-buttnode-ui-nodes.html` |
-| Mode | `html/dpx-buttnode-ui-mode.html` |
+| Status | `html/dpx-buttonode-ui-preview.html` |
+| Hostname | `html/dpx-buttonode-ui-hostname.html` |
+| Network | `html/dpx-buttonode-ui-network.html` |
+| Devices | `html/dpx-buttonode-ui-devices.html` |
+| Nodes | `html/dpx-buttonode-ui-nodes.html` |
+| Mode | `html/dpx-buttonode-ui-mode.html` |
 
 ---
 

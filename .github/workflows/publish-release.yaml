@@ -5,7 +5,7 @@ name: Publish Release from Existing Build
 #
 # Usage:
 #   gh workflow run publish-release.yaml \
-#     --repo dubpixel/dpx_buttnode \
+#     --repo dubpixel/dpx_buttonode \
 #     -f run-id=29445422833
 #
 # Or via GitHub web UI:
@@ -51,7 +51,7 @@ jobs:
       - name: Resolve version from artifact filenames
         id: meta
         run: |
-          # Filename: rockpi-s-dpx-buttnode-0.1.0-beta.4-build0.2.0.img.gz
+          # Filename: rockpi-s-dpx-buttonode-0.1.0-beta.4-build0.2.0.img.gz
           FIRST=$(ls release-assets/*.img.gz 2>/dev/null | head -1)
           if [[ -z "$FIRST" ]]; then
             echo "ERROR: No .img.gz files found in artifacts"
@@ -59,12 +59,12 @@ jobs:
           fi
           BASENAME=$(basename "$FIRST" .img.gz)
           # Extract buttons version and build version from filename
-          BUTTONS_VERSION=$(echo "$BASENAME" | grep -oP '(?<=dpx-buttnode-)[^-]+(\.[^-]+)+-beta\.\d+|(?<=dpx-buttnode-)[0-9]+\.[0-9]+\.[0-9]+[^-]*' | head -1 || echo "")
+          BUTTONS_VERSION=$(echo "$BASENAME" | grep -oP '(?<=dpx-buttonode-)[^-]+(\.[^-]+)+-beta\.\d+|(?<=dpx-buttonode-)[0-9]+\.[0-9]+\.[0-9]+[^-]*' | head -1 || echo "")
           BUILD_VERSION=$(echo "$BASENAME" | grep -oP '(?<=build)[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
           # Fallback: parse from VERSION file
           [[ -z "$BUILD_VERSION" ]] && BUILD_VERSION=$(cat VERSION 2>/dev/null || echo "unknown")
           # Simpler extraction: everything between "relay-" and "-build"
-          BUTTONS_VERSION=$(echo "$BASENAME" | sed 's/.*dpx-buttnode-//' | sed 's/-build.*//')
+          BUTTONS_VERSION=$(echo "$BASENAME" | sed 's/.*dpx-buttonode-//' | sed 's/-build.*//')
           echo "buttons-version=${BUTTONS_VERSION}" >> "$GITHUB_OUTPUT"
           echo "build-version=${BUILD_VERSION}" >> "$GITHUB_OUTPUT"
           echo "Buttons version : ${BUTTONS_VERSION}"
@@ -76,7 +76,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.meta.outputs.buttons-version }}
         run: |
-          TAG="dpx-buttnode-${VERSION}-build${BUILD_VERSION}"
+          TAG="dpx-buttonode-${VERSION}-build${BUILD_VERSION}"
           gh release delete "$TAG" \
             --repo "${{ github.repository }}" \
             --cleanup-tag --yes 2>/dev/null || true
@@ -96,10 +96,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.meta.outputs.buttons-version }}
         run: |
-          TAG="dpx-buttnode-${VERSION}-build${BUILD_VERSION}"
+          TAG="dpx-buttonode-${VERSION}-build${BUILD_VERSION}"
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
-            --title "dpx-buttnode v${BUILD_VERSION} — Buttons ${VERSION}" \
+            --title "dpx-buttonode v${BUILD_VERSION} — Buttons ${VERSION}" \
             --notes-file /tmp/release-notes.md \
             release-assets/*.img.gz
           echo "Release published: https://github.com/${{ github.repository }}/releases/tag/${TAG}"

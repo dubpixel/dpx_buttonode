@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "../../_.DPX_3d_LIB/DPX_3d/_.3D_PROJECTS/dpx_raxda_rockpis"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"chat.tools.terminal.autoApprove": {
+			"gh": true
+		}
+	}
+}

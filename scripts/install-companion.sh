@@ -2,7 +2,7 @@
 # install-companion.sh
 # Runs inside the Armbian image chroot via Packer (Full variant only).
 # Installs full Bitfocus Companion using the official companion-pi installer,
-# then disables it by default. Mode switching is handled by dpx-buttnode-ui.
+# then disables it by default. Mode switching is handled by dpx-buttonode-ui.
 #
 # Companion service name: companion
 # Companion web UI:       http://<device>:8000
@@ -40,7 +40,7 @@ echo "==> Bitfocus Companion installed"
 
 # ── Disable by default ────────────────────────────────────────────────────────
 # Only one service runs at a time. Default mode is Buttons.
-# dpx-buttnode-ui Mode tab handles enable/disable at runtime.
+# dpx-buttonode-ui Mode tab handles enable/disable at runtime.
 systemctl disable companion
 echo "==> companion.service: installed but DISABLED (default mode: buttons)"
 
@@ -59,11 +59,11 @@ if [ -f "/opt/companion/BUILD" ]; then
 elif [ -f "/opt/companion/package.json" ]; then
     COMPANION_VERSION=$(node -e "console.log(require('/opt/companion/package.json').version)" 2>/dev/null || echo "unknown")
 fi
-echo "COMPANION_VERSION=${COMPANION_VERSION}" >> /etc/dpx-buttnode-release
+echo "COMPANION_VERSION=${COMPANION_VERSION}" >> /etc/dpx-buttonode-release
 echo "==> Companion version: ${COMPANION_VERSION}"
 
 # ── Record variant in build metadata ─────────────────────────────────────────
-echo "VARIANT=full" >> /etc/dpx-buttnode-release
+echo "VARIANT=full" >> /etc/dpx-buttonode-release
 echo "==> Image variant: full"
 
 # ── Verify install ────────────────────────────────────────────────────────────

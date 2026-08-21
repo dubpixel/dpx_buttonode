@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-dpx-buttnode-ui — DPX device configuration web interface
-Installed: /usr/local/bin/dpx-buttnode-ui.py
-Service:   dpx-buttnode-ui.service
+dpx-buttonode-ui — DPX device configuration web interface
+Installed: /usr/local/bin/dpx-buttonode-ui.py
+Service:   dpx-buttonode-ui.service
 Port:      8080
 
 Zero external dependencies — uses Python 3 stdlib only.
@@ -242,7 +242,7 @@ def write_networkd_config(iface, mode, ip_cidr=None, gateway=None, dns="8.8.8.8"
     # Restart ourselves — the server socket breaks when the IP changes.
     # Use systemd-run so this continues after our process exits.
     run(["systemd-run", "--no-block", "--quiet",
-         "systemctl", "restart", "dpx-buttnode-ui"])
+         "systemctl", "restart", "dpx-buttonode-ui"])
 
 
 def get_usb_devices():
@@ -288,16 +288,16 @@ def usb_power_cycle(port_path, delay=2):
         return False, str(e)
 
 
-def discover_buttnodes():
-    return _cached("buttnodes", 10, _discover_buttnodes_raw)
+def discover_buttonodes():
+    return _cached("buttonodes", 10, _discover_buttonodes_raw)
 
-def _discover_buttnodes_raw():
-    """Return list of dpx-buttnode instances found via avahi-browse.
-    Requires avahi-daemon running and the _dpx-buttnode._tcp service registered.
+def _discover_buttonodes_raw():
+    """Return list of dpx-buttonode instances found via avahi-browse.
+    Requires avahi-daemon running and the _dpx-buttonode._tcp service registered.
     Each entry: {hostname, addr, port, is_self}
     """
     # -p parseable, -t terminate when done, -r resolve addresses
-    out, _, rc = run(["avahi-browse", "-p", "-t", "-r", "_dpx-buttnode._tcp"])
+    out, _, rc = run(["avahi-browse", "-p", "-t", "-r", "_dpx-buttonode._tcp"])
     if rc != 0:
         return []
     me   = get_hostname().lower()
@@ -405,7 +405,7 @@ def page(content, tab="status", alert="", alert_cls="a-ok"):
     companion_part = f' &nbsp;&middot;&nbsp; companion {esc(bld["companion_version"])}' if variant_tag == "full" else ""
     footer = (
         f'<div class="footer">'
-        f'dpx-buttnode v{esc(bld["dpx_version"])} [{esc(variant_tag)}]'
+        f'dpx-buttonode v{esc(bld["dpx_version"])} [{esc(variant_tag)}]'
         f' &nbsp;&middot;&nbsp; buttons {esc(bld["buttons_version"])}'
         f' &nbsp;&middot;&nbsp; satellite {esc(bld["satellite_version"])}'
         f'{companion_part}'
@@ -418,12 +418,12 @@ def page(content, tab="status", alert="", alert_cls="a-ok"):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{hostname} — dpx-buttnode-ui</title>
+<title>{hostname} — dpx-buttonode-ui</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <style>{CSS}</style>
 </head>
 <body>
-<div class="hdr"><h1>⯁ {hostname}</h1><span class="tag">dpx-buttnode-ui</span></div>
+<div class="hdr"><h1>⯁ {hostname}</h1><span class="tag">dpx-buttonode-ui</span></div>
 <nav class="nav">{nav}</nav>
 <div class="wrap">{al}{content}</div>
 {footer}
@@ -498,7 +498,7 @@ def render_hostname(val="", alert="", alert_cls="a-ok"):
     <div class="row">
       <label>New hostname (letters, numbers, hyphens — no spaces)</label>
       <input type="text" name="hostname" value="{disp}"
-             placeholder="dpx-buttnode-XXXX"
+             placeholder="dpx-buttonode-XXXX"
              pattern="[a-zA-Z0-9][a-zA-Z0-9\\-]{{0,62}}" required>
     </div>
     <button type="submit" class="btn btn-p">Apply</button>
@@ -600,7 +600,7 @@ def render_devices(alert="", alert_cls="a-ok"):
 
 
 def render_nodes(alert="", alert_cls="a-ok"):
-    nodes = discover_buttnodes()
+    nodes = discover_buttonodes()
     me    = get_hostname()
     rows  = ""
     for n in nodes:
@@ -627,7 +627,7 @@ def render_nodes(alert="", alert_cls="a-ok"):
 </div>"""
 
     if not rows:
-        rows = '<p class="note">No dpx-buttnodes found on this network.<br>Make sure avahi-daemon is running on all units.</p>'
+        rows = '<p class="note">No dpx-buttonodes found on this network.<br>Make sure avahi-daemon is running on all units.</p>'
 
     body = f"""
 <div class="sec"><h2>Nodes on This Network</h2>
@@ -655,13 +655,13 @@ def companion_installed():
     return COMPANION_DIR.exists()
 
 
-RELEASE_FILE = Path("/etc/dpx-buttnode-release")
+RELEASE_FILE = Path("/etc/dpx-buttonode-release")
 
 def get_build_info():
     return _cached("build_info", 3600, _get_build_info_raw)
 
 def _get_build_info_raw():
-    """Return dict of build metadata from /etc/dpx-buttnode-release.
+    """Return dict of build metadata from /etc/dpx-buttonode-release.
     Keys: dpx_version, buttons_version, git_branch, git_commit, build_date.
     Falls back to 'unknown' for any missing key.
     """
@@ -707,7 +707,7 @@ def write_satellite_config(host, port):
     # Write satellite's one-shot boot import file
     if SAT_BOOT_CFG.parent.exists():
         content = (
-            f"# Written by dpx-buttnode-ui\n"
+            f"# Written by dpx-buttonode-ui\n"
             f"COMPANION_IP={host}\n"
             f"COMPANION_PORT={port}\n"
         )
@@ -989,12 +989,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 def _apply():
                     import sys
                     time.sleep(1)
-                    print(f"dpx-buttnode-ui: apply start mode={_mode} iface={_iface} ip={_ip} gw={_gw}", file=sys.stderr, flush=True)
+                    print(f"dpx-buttonode-ui: apply start mode={_mode} iface={_iface} ip={_ip} gw={_gw}", file=sys.stderr, flush=True)
                     try:
                         write_networkd_config(_iface, _mode, _ip, _gw, _dns)
-                        print(f"dpx-buttnode-ui: apply done", file=sys.stderr, flush=True)
+                        print(f"dpx-buttonode-ui: apply done", file=sys.stderr, flush=True)
                     except Exception as exc:
-                        print(f"dpx-buttnode-ui: apply error: {exc}", file=sys.stderr, flush=True)
+                        print(f"dpx-buttonode-ui: apply error: {exc}", file=sys.stderr, flush=True)
                 threading.Thread(target=_apply, daemon=True).start()
                 return
 
@@ -1142,7 +1142,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"dpx-buttnode-ui listening on :{PORT}")
+    print(f"dpx-buttonode-ui listening on :{PORT}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

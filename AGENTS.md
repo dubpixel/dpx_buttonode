@@ -4,7 +4,7 @@ This document provides operational directives for AI coding assistants (GitHub C
 
 ---
 
-## PROJECT: dpx-buttnode
+## PROJECT: dpx-buttonode
 
 **Status:** v0.6.0 in progress — `feature/full-companion-variant` branch, test build done, pending flash test + merge  
 **Branch:** `feature/full-companion-variant` (rebased onto `main` @ `302b9d8`)  
@@ -14,7 +14,7 @@ This document provides operational directives for AI coding assistants (GitHub C
 
 **What was done this session (Copilot → Claude CLI handoff):**
 
-- Added Full/Lite **variant system** — `variable "variant"` in `dpx-buttnode.pkr.hcl`; Full = 8 GB image with Companion installed, Lite = 5 GB without
+- Added Full/Lite **variant system** — `variable "variant"` in `dpx-buttonode.pkr.hcl`; Full = 8 GB image with Companion installed, Lite = 5 GB without
 - Added `scripts/install-companion.sh` — installs full Bitfocus Companion inside Packer chroot (Full only); disables service by default
 - Web UI updated: 3-way mode selector (Buttons / Satellite / Companion), `companion_installed()` graceful degradation on Lite, `[variant]` in footer, `companion_version` in build info
 - `armbian-builder.yaml`: `variant` input, updated artifact/image naming, retention reduced 7→3 days, added `apt-get update` before QEMU install
@@ -22,7 +22,7 @@ This document provides operational directives for AI coding assistants (GitHub C
 - `CHANGELOG.md` v0.6.0 entry written
 - Fixed THIS NODE detection in `render_nodes()` — strip `.local` suffix before hostname comparison
 - Test build (run `31435307820`) completed successfully; draft pre-release `test-full-companion` created
-- **Test image stored locally:** `artifacts/rockpi-s-dpx-buttnode-0.6.0-full-feature-full-companion-variant-302b9d8.img.gz` (gitignored)
+- **Test image stored locally:** `artifacts/rockpi-s-dpx-buttonode-0.6.0-full-feature-full-companion-variant-302b9d8.img.gz` (gitignored)
 
 **Immediate next step:** Flash the test image, verify the checklist in the draft release notes, then merge `feature/full-companion-variant` → `main`
 
@@ -30,7 +30,7 @@ This document provides operational directives for AI coding assistants (GitHub C
 - Issue #4: make Full variant opt-in on automated releases (`build-full` boolean input on `release-action.yaml` so cron only builds Lite)
 
 **Draft release (test image download):**
-https://github.com/dubpixel/dpx_buttnode/releases/tag/untagged-7e96c8b2b26c4db30e07
+https://github.com/dubpixel/dpx_buttonode/releases/tag/untagged-7e96c8b2b26c4db30e07
 
 ---
 
@@ -40,18 +40,18 @@ Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` Armb
 
 | Component | Tech/Location | Purpose | Notes |
 |-----------|---------------|---------|-------|
-| Packer build definition | HCL / `dpx-buttnode.pkr.hcl` | Chroot customization of Armbian image | Uses `arm-image` plugin v0.2.7; targets 5 GB image; runs both install scripts |
-| Buttons install script | Bash / `scripts/install-buttons.sh` | Installs Buttons `.deb`, installs dpx-buttnode-ui + dpx-set-hostname, enables all services, registers mDNS | Runs as root inside Packer shell provisioner |
+| Packer build definition | HCL / `dpx-buttonode.pkr.hcl` | Chroot customization of Armbian image | Uses `arm-image` plugin v0.2.7; targets 5 GB image; runs both install scripts |
+| Buttons install script | Bash / `scripts/install-buttons.sh` | Installs Buttons `.deb`, installs dpx-buttonode-ui + dpx-set-hostname, enables all services, registers mDNS | Runs as root inside Packer shell provisioner |
 | Satellite install script | Bash / `scripts/install-satellite.sh` | Installs Companion Satellite from source, disables it (buttons is default), adds `satellite` user to `buttons` group | Runs after `install-buttons.sh`; needs network inside chroot; ~30-60 min |
-| Hostname script | Bash / `scripts/dpx-set-hostname.sh` | Sets `dpx-buttnode-XXXX` hostname from MAC on first boot | Reads MAC from sysfs; oneshot service runs Before=network.target avahi-daemon.service |
-| Web UI | Python / `src/dpx-buttnode-ui/dpx-buttnode-ui.py` | Device config UI on port 8080: hostname, DHCP/static network, USB devices, node discovery, **mode switch** | Pure Python 3 stdlib; tabs: Status, Hostname, Network, Devices, Nodes, Mode |
-| UI preview pages | HTML / `html/dpx-buttnode-ui-*.html` | Static mock previews of each UI tab for screenshots and dev reference | Moved to `html/` subfolder; file map in `.github/skills/screenshot-html-preview/SKILL.md` |
+| Hostname script | Bash / `scripts/dpx-set-hostname.sh` | Sets `dpx-buttonode-XXXX` hostname from MAC on first boot | Reads MAC from sysfs; oneshot service runs Before=network.target avahi-daemon.service |
+| Web UI | Python / `src/dpx-buttonode-ui/dpx-buttonode-ui.py` | Device config UI on port 8080: hostname, DHCP/static network, USB devices, node discovery, **mode switch** | Pure Python 3 stdlib; tabs: Status, Hostname, Network, Devices, Nodes, Mode |
+| UI preview pages | HTML / `html/dpx-buttonode-ui-*.html` | Static mock previews of each UI tab for screenshots and dev reference | Moved to `html/` subfolder; file map in `.github/skills/screenshot-html-preview/SKILL.md` |
 | Mode file | `/etc/dpx-mode` | Persists current mode (`buttons`, `satellite`, or `companion`) across reboots | Read by UI and by switch logic; written on mode change |
 | Satellite config | `/etc/dpx-satellite.conf` | Persists Companion server HOST/PORT | Written by UI POST /satellite-config; also stages `/boot/satellite-config` |
 | Download script | Bash / `scripts/download-buttons.sh` | Pulls `.tar.gz` from mirror release, extracts `.deb` | Primary: `gh release download`; fallback: `gh api /releases` list + `curl` |
 | Mirror upload helper | Bash / `scripts/upload-mirror.sh` | LOCAL script — uploads new Bitfocus package to mirror release | Run by maintainer when new Buttons version drops; requires `gh` auth |
-| Companion install script | Bash / `scripts/install-companion.sh` | Installs full Bitfocus Companion inside Packer chroot (Full variant only); disables service on install | Reads COMPANION_BUILD=stable; writes COMPANION_VERSION to `/etc/dpx-buttnode-release` |
-| Build workflow | YAML / `.github/workflows/armbian-builder.yaml` | Reusable: builds Armbian + downloads package + runs Packer + uploads artifact | `variant` input (lite/full); artifact named `{board}-dpx-buttnode-{ver}-{variant}-{commit}`; retention 3 days |
+| Companion install script | Bash / `scripts/install-companion.sh` | Installs full Bitfocus Companion inside Packer chroot (Full variant only); disables service on install | Reads COMPANION_BUILD=stable; writes COMPANION_VERSION to `/etc/dpx-buttonode-release` |
+| Build workflow | YAML / `.github/workflows/armbian-builder.yaml` | Reusable: builds Armbian + downloads package + runs Packer + uploads artifact | `variant` input (lite/full); artifact named `{board}-dpx-buttonode-{ver}-{variant}-{commit}`; retention 3 days |
 | Release workflow | YAML / `.github/workflows/release-action.yaml` | Daily cron version check + matrix build + GitHub Release publish | Matrix: `board × variant` (rockpi-s + orangepizero3 × lite + full); version prefix-match on mirror asset name |
 | Package mirror | GitHub Release / tag `buttons-deb-mirror` | Hosts the Bitfocus `.tar.gz` for CI to download | **Maintainer updates this when Bitfocus ships a new version** |
 
@@ -65,7 +65,7 @@ Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` Armb
 **While coding:**
 - Never commit `.tar.gz`, `.deb`, `.img`, or `.img.gz` files — they are gitignored; use the mirror release
 - Workflow YAML changes must be tested by manually triggering `armbian-builder.yaml` on one board before touching the matrix
-- The `deb_path` variable in `dpx-buttnode.pkr.hcl` must always point to `artifacts/bitfocus-buttons-usb-relay-headless.deb` — that's the normalized name `download-buttons.sh` outputs
+- The `deb_path` variable in `dpx-buttonode.pkr.hcl` must always point to `artifacts/bitfocus-buttons-usb-relay-headless.deb` — that's the normalized name `download-buttons.sh` outputs
 - Keep the `buttons-deb-mirror` release tag permanent — never delete it; it is the CI package source
 - File header per AGENTS.md §3
 
@@ -88,7 +88,7 @@ Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` Armb
 - ❌ Add `BITFOCUS_EMAIL` / `BITFOCUS_PASSWORD` secrets — the mirror approach eliminates this entirely
 - ❌ Commit binary files (`.deb`, `.tar.gz`, images) to git — use the mirror release
 - ❌ Delete or rename the `buttons-deb-mirror` release tag — it breaks all CI builds
-- ❌ Change the Packer output path `output-dpx-buttnode/` without updating the compression step in `armbian-builder.yaml`
+- ❌ Change the Packer output path `output-dpx-buttonode/` without updating the compression step in `armbian-builder.yaml`
 - ❌ Modify the board matrix in `release-action.yaml` without confirming the board is in the Armbian supported list
 
 ### Key Decisions
@@ -119,14 +119,14 @@ Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` Armb
 **Update Buttons to a new version:**
 ```bash
 ./scripts/upload-mirror.sh ~/Downloads/bitfocus-buttons-usb-relay-headless_X.Y.Z_arm64.tar.gz
-gh workflow run release-action.yaml --repo dubpixel/dpx_buttnode
+gh workflow run release-action.yaml --repo dubpixel/dpx_buttonode
 ```
 
 **Manual single-board test build:**
-Go to Actions → Build Armbian + dpx-buttnode Image → Run workflow → pick board
+Go to Actions → Build Armbian + dpx-buttonode Image → Run workflow → pick board
 
 **Force re-release of current version:**
-Actions → Release — dpx-buttnode Images → Run workflow → Force: true
+Actions → Release — dpx-buttonode Images → Run workflow → Force: true
 
 **Add a new board to the matrix:**
 Edit `.github/workflows/release-action.yaml` under `matrix.board`, add the Armbian board ID. Also add it to the `workflow_dispatch` options in `armbian-builder.yaml`.
@@ -137,14 +137,14 @@ Edit `.github/workflows/release-action.yaml` under `matrix.board`, add the Armbi
 
 **Check what version is in the mirror:**
 ```bash
-gh release view buttons-deb-mirror --repo dubpixel/dpx_buttnode --json assets --jq '.assets[].name'
+gh release view buttons-deb-mirror --repo dubpixel/dpx_buttonode --json assets --jq '.assets[].name'
 ```
 
 ### Skills Available
 
 | Skill | When to invoke | What it does |
 |-------|----------------|--------------|
-| `screenshot-html-preview` | After editing `dpx-buttnode-ui.py` or HTML preview files | Python source → static HTML mocks → pixel-accurate screenshots in `images/` |
+| `screenshot-html-preview` | After editing `dpx-buttonode-ui.py` or HTML preview files | Python source → static HTML mocks → pixel-accurate screenshots in `images/` |
 | `update-docs` | Bumping version, updating README, CHANGELOG, or release prep | Semver bump, changelog entry, README accuracy check, roadmap grooming |
 
 ### Reference

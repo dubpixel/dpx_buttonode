@@ -2,7 +2,7 @@
 # install-satellite.sh
 # Runs inside the Armbian image chroot via Packer.
 # Installs Companion Satellite (headless) using the official install script,
-# then disables it by default. Mode switching is handled by dpx-buttnode-ui.
+# then disables it by default. Mode switching is handled by dpx-buttonode-ui.
 #
 # Satellite service name: satellite
 # Satellite REST API:     http://localhost:9999/api/config
@@ -31,7 +31,7 @@ echo "==> Companion Satellite installed"
 
 # ── Disable by default ────────────────────────────────────────────────────────
 # Only one of buttons/satellite runs at a time. Default mode is Buttons.
-# dpx-buttnode-ui Mode tab handles enable/disable at runtime.
+# dpx-buttonode-ui Mode tab handles enable/disable at runtime.
 systemctl disable satellite
 echo "==> satellite.service: installed but DISABLED (default mode: buttons)"
 
@@ -49,7 +49,7 @@ echo "==> /etc/dpx-mode: buttons (default)"
 # ── Record satellite version in build metadata ────────────────────────────────
 SAT_VERSION=$(/opt/fnm/aliases/default/bin/node -e \
   "console.log(require('/opt/companion-satellite/satellite/package.json').version)" 2>/dev/null || echo "unknown")
-echo "SATELLITE_VERSION=${SAT_VERSION}" >> /etc/dpx-buttnode-release
+echo "SATELLITE_VERSION=${SAT_VERSION}" >> /etc/dpx-buttonode-release
 echo "==> Satellite version: ${SAT_VERSION}"
 
 # ── Verify install ────────────────────────────────────────────────────────────

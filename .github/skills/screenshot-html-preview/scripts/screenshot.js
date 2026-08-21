@@ -1,21 +1,21 @@
 /**
- * screenshot.js — dpx-buttnode-ui Playwright screenshot loop
+ * screenshot.js — dpx-buttonode-ui Playwright screenshot loop
  *
  * Paste this entire block into run_playwright_code.
  * Requires: html/ preview files already exist and have min-height:100vh removed.
  * Output:   overwrites images/001–006 in place.
  */
-const BASE    = 'file:///Users/yourmom/Library/CloudStorage/GoogleDrive-i@dubpixel.tv/My%20Drive/_.DUBPIXEL/_...CODE/dpx_buttnode/html/';
-const IMGDIR  = '/Users/yourmom/Library/CloudStorage/GoogleDrive-i@dubpixel.tv/My Drive/_.DUBPIXEL/_...CODE/dpx_buttnode/images/';
+const BASE    = 'file:///Users/yourmom/Library/CloudStorage/GoogleDrive-i@dubpixel.tv/My%20Drive/_.DUBPIXEL/_...CODE/dpx_buttonode/html/';
+const IMGDIR  = '/Users/yourmom/Library/CloudStorage/GoogleDrive-i@dubpixel.tv/My Drive/_.DUBPIXEL/_...CODE/dpx_buttonode/images/';
 const WIDTH   = 920;
 
 const TABS = [
-  { file: 'dpx-buttnode-ui-preview.html',  out: '001_status.jpe'  },
-  { file: 'dpx-buttnode-ui-hostname.html', out: '002_hostname.jpe' },
-  { file: 'dpx-buttnode-ui-network.html',  out: '003_network.jpe'  },
-  { file: 'dpx-buttnode-ui-devices.html',  out: '004_devices.jpe'  },
-  { file: 'dpx-buttnode-ui-nodes.html',    out: '005_nodes.jpe'    },
-  { file: 'dpx-buttnode-ui-mode.html',     out: '006_mode.jpe'     },
+  { file: 'dpx-buttonode-ui-preview.html',  out: '001_status.jpe'  },
+  { file: 'dpx-buttonode-ui-hostname.html', out: '002_hostname.jpe' },
+  { file: 'dpx-buttonode-ui-network.html',  out: '003_network.jpe'  },
+  { file: 'dpx-buttonode-ui-devices.html',  out: '004_devices.jpe'  },
+  { file: 'dpx-buttonode-ui-nodes.html',    out: '005_nodes.jpe'    },
+  { file: 'dpx-buttonode-ui-mode.html',     out: '006_mode.jpe'     },
 ];
 
 const saved = [];
