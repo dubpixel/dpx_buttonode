@@ -39,10 +39,11 @@ rm -f /tmp/companion-official-install.sh
 echo "==> Bitfocus Companion installed"
 
 # ── Disable by default ────────────────────────────────────────────────────────
-# Only one service runs at a time. Default mode is Buttons.
+# Only one service runs at a time. Default mode is Satellite (set in
+# install-satellite.sh, which runs before this on Full-variant builds).
 # dpx-buttonode-ui Mode tab handles enable/disable at runtime.
 systemctl disable companion
-echo "==> companion.service: installed but DISABLED (default mode: buttons)"
+echo "==> companion.service: installed but DISABLED (default mode: satellite)"
 
 # ── Fix HID device permissions ────────────────────────────────────────────────
 # The Buttons USB Relay package owns /dev/hidraw* via udev GROUP="buttons".

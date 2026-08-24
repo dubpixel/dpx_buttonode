@@ -57,18 +57,22 @@ UDEV
 udevadm control --reload-rules || true
 
 # ── systemd unit ──────────────────────────────────────────────────────────
-# Conflicts= gives a clean hand-off: the instant bitfocus-buttons-usb-relay
-# starts (at boot, or via a later /mode switch back to buttons), systemd
-# stops us automatically — no manual coordination needed. Deliberately NOT
-# After=network-online.target: showing "no network yet" during that window
-# is the entire point of this service.
+# Conflicts= on all three mode services (not just Buttons) gives a clean
+# hand-off no matter which one is actually active — Satellite is the
+# default mode now, and it draws to the deck itself once connected to a
+# Companion server, so it needs the same yield-on-start treatment Buttons
+# always had. The instant any of the three starts (at boot, or via a
+# later mode switch — including one triggered from this very service's
+# own MODE key), systemd stops us automatically, no manual coordination
+# needed. Deliberately NOT After=network-online.target: showing "no
+# network yet" during that window is the entire point of this service.
 cat > /etc/systemd/system/dpx-deck-splash.service << 'UNIT'
 [Unit]
 Description=Stream Deck HID status splash (IP/mDNS) before Buttons/Satellite/Companion claims the device
 Documentation=https://github.com/dubpixel/dpx_buttonode
 After=dpx-set-hostname.service
-Before=bitfocus-buttons-usb-relay.service
-Conflicts=bitfocus-buttons-usb-relay.service
+Before=bitfocus-buttons-usb-relay.service satellite.service companion.service
+Conflicts=bitfocus-buttons-usb-relay.service satellite.service companion.service
 
 [Service]
 Type=simple
@@ -91,5 +95,19 @@ UNIT
 
 systemctl enable dpx-deck-splash.service
 echo "==> dpx-deck-splash.service: enabled"
+
+# ── sudoers: the ONLY door from dpx-splash (buttons group, nothing else)
+# to actually changing system state ─────────────────────────────────────────
+# Two fixed, argument-free commands, nothing else. cycle_mode()/toggle_net()
+# in dpx-buttonode-ui.py work out their own target from current state, so
+# there's no argument value here for a compromised/buggy caller to smuggle
+# something through — the whole line either matches exactly or it doesn't.
+cat > /etc/sudoers.d/dpx-splash << 'SUDOERS'
+dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --cycle-mode
+dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --toggle-net
+SUDOERS
+chmod 0440 /etc/sudoers.d/dpx-splash
+visudo -cf /etc/sudoers.d/dpx-splash
+echo "==> /etc/sudoers.d/dpx-splash installed and validated"
 
 echo "==> dpx-deck-splash installed successfully"

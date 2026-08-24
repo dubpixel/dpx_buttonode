@@ -283,6 +283,17 @@ def apply_net_toggle(target):
     return True, f"Restored static {cfg['IP_CIDR']}"
 
 
+def toggle_net():
+    """Flip DHCP<->static based on whatever the current mode actually is —
+    no argument needed. Same rationale as cycle_mode(): a caller with no
+    way to specify or validate a target (a deck keypress, via a
+    narrowly-scoped sudoers rule) should have nothing to get wrong.
+    """
+    current = get_net_info()
+    target = "static" if current["mode"] == "dhcp" else "dhcp"
+    return apply_net_toggle(target)
+
+
 def get_usb_devices():
     return _cached("usb_devices", 5, _get_usb_devices_raw)
 
@@ -729,6 +740,24 @@ def switch_mode(new_mode):
     MODE_FILE.write_text(new_mode + "\n")
     LABELS = {"buttons": "Buttons USB Relay", "satellite": "Companion Satellite", "companion": "Bitfocus Companion"}
     return True, f"Switched to {LABELS[new_mode]}"
+
+
+def cycle_mode():
+    """Advance to the next mode in sequence: buttons -> satellite ->
+    companion (skipped if not installed) -> buttons. No arguments — this
+    is deliberately a fixed, no-input action so a caller (e.g. the deck's
+    mode keypress, via a narrowly-scoped sudoers rule) needs zero argument
+    validation to invoke it safely. Returns (ok: bool, message: str).
+    """
+    order = ["buttons", "satellite", "companion"]
+    current = get_dpx_mode()
+    idx = order.index(current) if current in order else 0
+    for _ in range(len(order)):
+        idx = (idx + 1) % len(order)
+        candidate = order[idx]
+        if candidate != "companion" or companion_installed():
+            return switch_mode(candidate)
+    return False, "No other mode available"
 
 
 RELEASE_FILE = Path("/etc/dpx-buttonode-release")
@@ -1182,20 +1211,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 #
-# --apply-mode <buttons|satellite|companion> and --apply-net <dhcp|static>
-# are internal CLI subcommands, not part of the web UI. They exist so a
-# privileged, narrowly-scoped caller (see /etc/sudoers.d/dpx-splash) can
-# trigger the exact same mode-switch / network-toggle logic the web UI uses,
-# without that caller needing to duplicate it or run with broad privilege
-# itself. Used by the deck splash service's keypress handlers.
+# --cycle-mode and --toggle-net are internal CLI subcommands, not part of
+# the web UI. They exist so a privileged, narrowly-scoped caller (see
+# /etc/sudoers.d/dpx-splash) can trigger the exact same mode-switch /
+# network-toggle logic the web UI uses, without duplicating it or running
+# with broad privilege itself. Used by the deck splash service's keypress
+# handlers. Deliberately no arguments — cycle_mode()/toggle_net() work out
+# the target themselves from current state, so the sudoers rule can
+# whitelist these two exact command lines with nothing left to validate.
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 3 and sys.argv[1] == "--apply-mode":
-        ok, msg = switch_mode(sys.argv[2])
+    if len(sys.argv) >= 2 and sys.argv[1] == "--cycle-mode":
+        ok, msg = cycle_mode()
         print(msg)
         sys.exit(0 if ok else 1)
-    if len(sys.argv) >= 3 and sys.argv[1] == "--apply-net":
-        ok, msg = apply_net_toggle(sys.argv[2])
+    if len(sys.argv) >= 2 and sys.argv[1] == "--toggle-net":
+        ok, msg = toggle_net()
         print(msg)
         sys.exit(0 if ok else 1)
 

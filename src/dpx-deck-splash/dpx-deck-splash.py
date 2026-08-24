@@ -9,10 +9,15 @@ Service:   dpx-deck-splash.service (After=dpx-set-hostname.service,
            Before=/Conflicts=bitfocus-buttons-usb-relay.service — see the
            unit file for the full hand-off story)
 
-Phase 1 scope: read-only display. No keypress handling, no mode/network
-switching — that's Phase 2/3 (see VSCODE... no, see the project plan /
-AGENTS.md). This script only draws; it never touches systemctl, netplan,
-or /etc/dpx-mode.
+Phase 2/3: if the deck has a third key row, the first two keys in it are
+action buttons — MODE (cycles Buttons -> Satellite -> Companion) and NET
+(toggles DHCP <-> last-known-static). This script never touches systemctl,
+netplan, or /etc/dpx-mode directly — it shells out via `sudo` to
+dpx-buttonode-ui.py's `--cycle-mode`/`--toggle-net` CLI subcommands (see
+/etc/sudoers.d/dpx-splash, installed by install-deck-splash.sh), which is
+where that logic actually lives. Keeps this process's own privilege
+footprint at exactly `buttons` group membership — nothing more — even
+though it can now trigger real system changes.
 
 Unlike dpx-buttonode-ui.py, this script is NOT stdlib-only on purpose —
 drawing to the deck needs real HID + image handling, which is a different
@@ -33,14 +38,18 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 
 from StreamDeck.DeviceManager import DeviceManager
 from StreamDeck.ImageHelpers import PILHelper
 from PIL import Image, ImageDraw, ImageFont
 
+PORT = 8080                  # dpx-buttonode-ui's port — shown alongside the IP
 REFRESH_SECONDS = 5          # how often to re-check IP/hostname while idle
 RETRY_SECONDS = 3            # how often to retry finding a deck if none present
+DEBOUNCE_SECONDS = 2         # ignore repeat presses of the same action key within this window
+UI_SCRIPT = "/usr/local/bin/dpx-buttonode-ui.py"
 FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
@@ -110,13 +119,18 @@ def blank_key(deck):
 
 
 def chunk_ip(ip, n):
-    """Split an IP into up to n chunks, one octet per chunk where possible."""
+    """Split an IP into up to n chunks, one octet per chunk where possible.
+    If there's room for all 4 octets plus one more key, the last key shows
+    the web UI port — easy to miss that the URL needs ":8080" otherwise.
+    """
     if not ip:
         placeholder = ["no", "IP"]
         return (placeholder + [""] * n)[:n]
     octets = ip.split(".")
-    if n >= len(octets):
-        return octets + [""] * (n - len(octets))
+    if n > len(octets):
+        return octets + [f":{PORT}"] + [""] * (n - len(octets) - 1)
+    if n == len(octets):
+        return octets
     # fewer keys than octets — just show the last two combined
     return [".".join(octets[:2]), ".".join(octets[2:])] + [""] * max(n - 2, 0)
 
@@ -137,21 +151,75 @@ def chunk_hostname(name, n):
     return segments + [""] * (n - len(segments))
 
 
+def action_key_indices(deck):
+    """Key indices for the MODE and NET action buttons, or (None, None) if
+    the deck doesn't have a third row to put them in (e.g. a 2-row Mini) —
+    Phase 2/3 is simply unavailable on decks that small, not an error."""
+    rows, cols = deck.key_layout()
+    if rows < 3:
+        return None, None
+    return 2 * cols, 2 * cols + 1
+
+
 def draw_splash(deck, ip, mdns_name):
     rows, cols = deck.key_layout()
     total = deck.key_count()
+    mode_key, net_key = action_key_indices(deck)
 
     ip_row = chunk_ip(ip, cols) if rows >= 1 else []
     host_row = chunk_hostname(mdns_name, cols) if rows >= 2 else []
 
     for i in range(total):
         r, c = divmod(i, cols)
-        if r == 0 and c < len(ip_row) and ip_row[c]:
+        if i == mode_key:
+            deck.set_key_image(i, render_key(deck, "MODE", font_size=14))
+        elif i == net_key:
+            deck.set_key_image(i, render_key(deck, "NET", font_size=14))
+        elif r == 0 and c < len(ip_row) and ip_row[c]:
             deck.set_key_image(i, render_key(deck, ip_row[c]))
         elif r == 1 and c < len(host_row) and host_row[c]:
             deck.set_key_image(i, render_key(deck, host_row[c], font_size=12))
         else:
             deck.set_key_image(i, blank_key(deck))
+
+
+def run_privileged(subcommand):
+    """Shell out via sudo to the exact CLI subcommand on dpx-buttonode-ui.py
+    that /etc/sudoers.d/dpx-splash whitelists. This process never runs the
+    mode-switch/network-toggle logic itself or gains any privilege beyond
+    `buttons` group membership — sudo is the only door, and it opens onto
+    exactly one of two fixed, argument-free commands."""
+    try:
+        r = subprocess.run(
+            ["sudo", "-n", "/usr/bin/python3", UI_SCRIPT, subcommand],
+            capture_output=True, text=True, timeout=30,
+        )
+        msg = (r.stdout or r.stderr).strip()
+        print(f"dpx-deck-splash: {subcommand} -> {msg or ('ok' if r.returncode == 0 else 'failed')}")
+    except Exception as e:
+        print(f"dpx-deck-splash: {subcommand} failed to run ({e})", file=sys.stderr)
+
+
+def make_key_callback():
+    """Returns a callback for deck.set_key_callback(). Debounced per key —
+    a single physical press can otherwise fire faster than a multi-second
+    mode-switch/network-toggle can safely be re-triggered."""
+    last_press = {}
+
+    def on_key(deck, key, pressed):
+        if not pressed:
+            return
+        now = time.monotonic()
+        if now - last_press.get(key, 0) < DEBOUNCE_SECONDS:
+            return
+        last_press[key] = now
+        mode_key, net_key = action_key_indices(deck)
+        if key == mode_key:
+            threading.Thread(target=run_privileged, args=("--cycle-mode",), daemon=True).start()
+        elif key == net_key:
+            threading.Thread(target=run_privileged, args=("--toggle-net",), daemon=True).start()
+
+    return on_key
 
 
 def run_splash_loop():
@@ -166,6 +234,7 @@ def run_splash_loop():
             deck.open()
             deck.reset()
             deck.set_brightness(60)
+            deck.set_key_callback(make_key_callback())
             print(f"dpx-deck-splash: opened {deck.deck_type()} ({deck.key_count()} keys)")
             while True:
                 ip = get_ip()

@@ -23,18 +23,27 @@ No external libraries needed. A pure-JS QR generator (e.g. `qrcode.js` inlined) 
 ---
 
 ### Stream Deck HID Boot Splash
-**Status:** in progress — Phase 1 hardware-validated on `feature/deck-hid-splash` (2026-08-24, Stream Deck MK.2) `- [x]` Phase 1 code / `- [x]` hardware test / `- [ ]` Phase 2 / `- [ ]` Phase 3
+**Status:** Phase 1 hardware-validated (2026-08-24, Stream Deck MK.2); Phase 2/3 code complete, not yet hardware-tested `- [x]` Phase 1 / `- [x]` Phase 2 code / `- [x]` Phase 3 code / `- [ ]` Phase 2/3 hardware test
 
 Draw device status directly onto the attached Stream Deck's keys via HID, instead of requiring SSH or the
 web UI to find a fresh unit on the network.
 
-- **Phase 1** (done, pending hardware test): read-only splash — IP + mDNS hostname drawn during the boot
-  window before Buttons/Satellite/Companion claims the device. New `dpx-deck-splash.service`
-  (`Conflicts=bitfocus-buttons-usb-relay.service` for clean hand-off), own venv, low-priv `dpx-splash` user.
-- **Phase 2** (not started): deck keypress cycles operating mode (Buttons → Satellite → Companion), via a
-  narrowly-scoped sudoers rule calling the UI script's new `--apply-mode` CLI subcommand.
-- **Phase 3** (not started): deck keypress toggles DHCP ↔ last-known-static IP, via `--apply-net`. No
-  on-deck keyboard, so static IP entry itself still requires the web UI — this is flip-only.
+- **Phase 1** (hardware-validated): read-only splash — IP + web UI port + mDNS hostname drawn during the
+  boot window before Buttons/Satellite/Companion claims the device. `dpx-deck-splash.service`, own venv,
+  low-priv `dpx-splash` user (`buttons` group only). Required two hardware-only fixes CI couldn't catch:
+  the `streamdeck` library needs `libhidapi-libusb0` + a `/dev/bus/usb/*` udev rule, not hidraw; hostname
+  now chunks onto keys on word boundaries instead of a fixed character count.
+- **Phase 2/3** (code complete, pending hardware test): a third key row (when present) adds MODE and NET
+  action buttons — MODE cycles Buttons → Satellite → Companion (skipping Companion if not installed), NET
+  toggles DHCP ↔ last-known-static, both debounced. The splash process stays unprivileged (`buttons` group
+  only) and reaches system state through exactly two fixed, argument-free commands
+  (`dpx-buttonode-ui.py --cycle-mode` / `--toggle-net`) via a narrowly-scoped `/etc/sudoers.d/dpx-splash`
+  rule — no argument value for a bug or compromise to smuggle through.
+  `dpx-deck-splash.service` now `Conflicts=` all three mode services (not just Buttons), since Satellite
+  itself draws to the deck once connected to a Companion server. **Known limitation:** the MODE/NET keys
+  only work while the splash service is actually running — i.e. in Satellite or Companion mode. Buttons
+  mode conflicts with the splash service by design, so switching *out of* Buttons still needs the web UI
+  or SSH.
 
 ### Network Discovery Page
 **Status:** partially done — Nodes tab shipped in v0.5.0 (LAN discovery via web UI); full server-side subnet scan still `- [ ]`

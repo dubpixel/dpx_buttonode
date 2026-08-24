@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Project renamed `buttnode` → `buttonode`** (repo, package, filenames, docs, CI). Full spelling reads
   cleaner and avoids the Bluetooth ("BT node") misread. GitHub repo rename + remote URL update pending as a
   separate step.
+- **Default operating mode flipped from Buttons to Companion Satellite.** Most units are meant to sit in a
+  Companion-driven setup out of the box; Buttons is now the opt-in mode via the web UI's Mode tab instead
+  of the default. `install-satellite.sh` now disables `bitfocus-buttons-usb-relay.service` (undoing the
+  Buttons `.deb`'s own postinst auto-enable) and enables `satellite.service` instead; `/etc/dpx-mode`
+  defaults to `satellite`
 
 ### Added
 - `update-docs` skill (`.github/skills/update-docs/SKILL.md`) — full documentation audit workflow for dpx_buttonode
@@ -32,7 +37,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   word boundaries (`dpx`/`buttonode`/`2199`/`local`) instead of a fixed 6-char slice that broke words
   mid-word; render_key() now shrinks font size to fit instead of a fixed size
 - `dpx-buttonode-ui.py`: extracted `switch_mode()` out of the inline `/mode` POST handler; added
-  `--apply-mode`/`--apply-net` CLI subcommands (groundwork for Phase 2/3 above, no new privilege surface yet)
+  `cycle_mode()`/`toggle_net()` + `--cycle-mode`/`--toggle-net` CLI subcommands — deliberately argument-free
+  so a caller has nothing to smuggle a bad value through
+- **Deck splash Phase 2/3** (code complete, not yet hardware-tested): a third key row (when present) adds
+  MODE and NET action buttons on the deck itself. MODE cycles Buttons → Satellite → Companion (skips
+  Companion if not installed); NET toggles DHCP ↔ last-known-static. Both debounced (2s). Reached via a
+  narrowly-scoped `/etc/sudoers.d/dpx-splash` rule allowing exactly `--cycle-mode`/`--toggle-net`, nothing
+  else — `dpx-deck-splash.py` itself stays unprivileged (`buttons` group only) throughout.
+  `dpx-deck-splash.service` now `Conflicts=` all three mode services, not just Buttons, since Satellite
+  also draws to the deck once connected to a Companion server
+- Deck splash: IP display now shows the web UI port (`:8080`) as a 5th key alongside the 4 octets, when
+  the deck has room — easy to forget the URL needs it otherwise
 
 ---
 

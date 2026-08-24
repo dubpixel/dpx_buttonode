@@ -29,11 +29,18 @@ rm -f /tmp/satellite-official-install.sh
 
 echo "==> Companion Satellite installed"
 
-# ── Disable by default ────────────────────────────────────────────────────────
-# Only one of buttons/satellite runs at a time. Default mode is Buttons.
-# dpx-buttonode-ui Mode tab handles enable/disable at runtime.
-systemctl disable satellite
-echo "==> satellite.service: installed but DISABLED (default mode: buttons)"
+# ── Default mode: Satellite ────────────────────────────────────────────────────
+# Only one of buttons/satellite/companion runs at a time. Default mode is
+# Companion Satellite, not Buttons — most units are meant to sit in a
+# Companion-driven setup out of the box; Buttons is the opt-in mode now.
+# The Buttons .deb's own postinst auto-enables+starts
+# bitfocus-buttons-usb-relay.service — undo that here since this script
+# runs after install-buttons.sh and is where the real default gets decided.
+# dpx-buttonode-ui Mode tab handles enable/disable at runtime either way.
+systemctl disable --now bitfocus-buttons-usb-relay
+systemctl enable satellite
+echo "==> satellite.service: enabled (default mode)"
+echo "==> bitfocus-buttons-usb-relay.service: disabled (opt-in via Mode tab)"
 
 # ── Fix HID device permissions ────────────────────────────────────────────────
 # The Buttons USB Relay package owns /dev/hidraw* via udev GROUP="buttons".
@@ -43,8 +50,8 @@ usermod -aG buttons satellite
 echo "==> satellite user added to 'buttons' group (HID device access)"
 
 # ── Write mode persistence file ───────────────────────────────────────────────
-echo "buttons" > /etc/dpx-mode
-echo "==> /etc/dpx-mode: buttons (default)"
+echo "satellite" > /etc/dpx-mode
+echo "==> /etc/dpx-mode: satellite (default)"
 
 # ── Record satellite version in build metadata ────────────────────────────────
 SAT_VERSION=$(/opt/fnm/aliases/default/bin/node -e \
@@ -60,5 +67,7 @@ else
     echo "==> Run 'sudo satellite-update' on the device to recover"
 fi
 
-systemctl is-enabled satellite.service 2>/dev/null && echo "==> Service: enabled (unexpected)" \
-    || echo "==> Service: disabled (correct)"
+systemctl is-enabled satellite.service 2>/dev/null && echo "==> Service: enabled (correct)" \
+    || echo "==> Service: disabled (unexpected)"
+systemctl is-enabled bitfocus-buttons-usb-relay.service >/dev/null 2>&1 && echo "==> WARNING: bitfocus-buttons-usb-relay still enabled" \
+    || echo "==> bitfocus-buttons-usb-relay.service: disabled (correct)"
