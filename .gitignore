@@ -51,3 +51,6 @@ build/
 *.deb
 *.img
 *.img.gz
+
+# Copilot chat history export (personal, not for repo history)
+_chat-history/
