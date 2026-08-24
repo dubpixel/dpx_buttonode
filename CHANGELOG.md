@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README: satisfied `<!--todo-->` comments removed
 - AGENTS.md: `html/` folder added to architecture table for UI preview pages
 - ROADMAP.md: checkboxes added to planned items; Nodes tab marked as shipped
+- `src/dpx-deck-splash/dpx-deck-splash.py` + `scripts/install-deck-splash.sh` (Phase 1) — draws IP + mDNS
+  hostname on the Stream Deck's keys during the boot window before Buttons/Satellite/Companion claims the
+  device. New low-priv `dpx-splash` user, own venv (`streamdeck` + Pillow), `dpx-deck-splash.service` with
+  `Conflicts=bitfocus-buttons-usb-relay.service` for a clean device hand-off. Read-only display only — no
+  keypress handling yet (Phase 2/3 planned: deck-triggered mode switch, DHCP/static toggle)
+- `dpx-buttonode-ui.py`: extracted `switch_mode()` out of the inline `/mode` POST handler; added
+  `--apply-mode`/`--apply-net` CLI subcommands (groundwork for Phase 2/3 above, no new privilege surface yet)
 
 ---
 

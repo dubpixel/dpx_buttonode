@@ -6,31 +6,34 @@ This document provides operational directives for AI coding assistants (GitHub C
 
 ## PROJECT: dpx-buttonode
 
-**Status:** v0.6.0 in progress — `feature/full-companion-variant` branch, test build done, pending flash test + merge  
-**Branch:** `feature/full-companion-variant` (rebased onto `main` @ `302b9d8`)  
-**Version File:** `VERSION` (0.6.0 on feature branch, 0.5.0 on main)
+**Status:** two stacked, unmerged branches — rename+variant work built and draft-released but not hardware-validated; new Stream Deck HID splash feature in progress on top of it  
+**Branch:** `feature/deck-hid-splash` (branched off `refactor/rename-dpx-buttonode` @ `30be61b`)  
+**Version File:** `VERSION` (0.6.0)
 
-### Handoff (2026-08-20)
+**Branch stack (oldest → newest):**
+- `main` — **stale.** Predates both the `dpx_buttnode`→`dpx_buttonode` rename and the entire v0.6.0 Full/Lite Companion variant system. Do not branch new work off `main` until `refactor/rename-dpx-buttonode` merges into it.
+- `refactor/rename-dpx-buttonode` — full project rename (`buttnode`→`buttonode`, repo/folder/GitHub renamed to match) + the v0.6.0 Full/Lite Companion variant work it was built on top of. Both Lite and Full images rebuilt clean in CI post-rename and posted as draft prereleases (`rename-test-lite`, `rename-test-full`) — **not yet hardware-validated.** Not merged to `main`.
+- `feature/deck-hid-splash` — current work, branched off the rename branch (not off stale `main`) since it only depends on file layout/service names that are already correct there; independent of whether Full Companion mode itself has been hardware-tested. See "Handoff (2026-08-21/22)" below.
 
-**What was done this session (Copilot → Claude CLI handoff):**
+### Handoff (2026-08-21 / 2026-08-22)
 
-- Added Full/Lite **variant system** — `variable "variant"` in `dpx-buttonode.pkr.hcl`; Full = 8 GB image with Companion installed, Lite = 5 GB without
-- Added `scripts/install-companion.sh` — installs full Bitfocus Companion inside Packer chroot (Full only); disables service by default
-- Web UI updated: 3-way mode selector (Buttons / Satellite / Companion), `companion_installed()` graceful degradation on Lite, `[variant]` in footer, `companion_version` in build info
-- `armbian-builder.yaml`: `variant` input, updated artifact/image naming, retention reduced 7→3 days, added `apt-get update` before QEMU install
-- `release-action.yaml`: matrix expanded to `board × variant` (4 combos: rockpi-s + orangepizero3 × lite + full)
-- `CHANGELOG.md` v0.6.0 entry written
-- Fixed THIS NODE detection in `render_nodes()` — strip `.local` suffix before hostname comparison
-- Test build (run `31435307820`) completed successfully; draft pre-release `test-full-companion` created
-- **Test image stored locally:** `artifacts/rockpi-s-dpx-buttonode-0.6.0-full-feature-full-companion-variant-302b9d8.img.gz` (gitignored)
+**What was done this session (Copilot → Claude CLI handoff continuation):**
 
-**Immediate next step:** Flash the test image, verify the checklist in the draft release notes, then merge `feature/full-companion-variant` → `main`
+- Full project rename `dpx_buttnode` → `dpx_buttonode`: 296 case-insensitive occurrences across 26 files, 8 files/1 dir renamed, GitHub repo renamed (`gh repo rename`), local folder renamed to match. Committed on `refactor/rename-dpx-buttonode`.
+- Rebuilt both variants post-rename in CI (`armbian-builder.yaml`, board=rockpi-s): `variant=full` and `variant=lite`, both green. Posted as draft/prerelease with untested checklists: `rename-test-lite`, `rename-test-full`.
+- Recovered the pre-Claude-Code build history from GitHub Copilot Chat's local VS Code storage (undocumented patch-log format — see `VSCODE-CHAT-RECOVERY.md` for the recovery methodology, reusable for other workspaces). Raw log at `_chat-history/copilot-chat-log.md` (gitignored).
+- Started **Stream Deck HID boot splash** feature (Phase 1 of 3, see plan below) on `feature/deck-hid-splash`:
+  - New `src/dpx-deck-splash/dpx-deck-splash.py` + `scripts/install-deck-splash.sh` + `dpx-buttonode.pkr.hcl` wiring — draws IP + mDNS hostname on the deck's keys during the boot window before Buttons/Satellite/Companion claims the device. Own venv (`streamdeck` + `Pillow`), separate from the stdlib-only config UI. Runs as new low-priv `dpx-splash` user (`buttons` group only). New `dpx-deck-splash.service`, `Conflicts=bitfocus-buttons-usb-relay.service` for clean hand-off.
+  - Extracted `switch_mode()` out of the UI's inline `/mode` POST handler; added `--apply-mode`/`--apply-net` CLI subcommands to `dpx-buttonode-ui.py` — groundwork for Phase 2/3 (deck-triggered mode switch + DHCP/static toggle via a scoped sudoers rule), no new privilege surface added yet.
+  - **Not yet done:** Phase 1 hasn't been hardware-tested (no real Stream Deck HID protocol testing possible without hardware). Phase 2 (mode-switch keypress) and Phase 3 (DHCP/static keypress) not started.
 
-**Open issues to address after merge:**
+**Immediate next steps:**
+1. Flash `rename-test-lite`/`rename-test-full` and run the checklists in their release notes; merge `refactor/rename-dpx-buttonode` → `main` once validated.
+2. Hardware-test the Phase 1 deck splash (boot with a deck attached, confirm IP/hostname render correctly and the service yields cleanly to Buttons — see `journalctl -u dpx-deck-splash -u bitfocus-buttons-usb-relay`).
+3. Phase 2/3 of the deck splash feature once Phase 1 is validated (see plan file referenced in git history / ask for a recap — one PR per phase against `feature/deck-hid-splash`).
+
+**Open issues to address after the rename branch merges:**
 - Issue #4: make Full variant opt-in on automated releases (`build-full` boolean input on `release-action.yaml` so cron only builds Lite)
-
-**Draft release (test image download):**
-https://github.com/dubpixel/dpx_buttonode/releases/tag/untagged-7e96c8b2b26c4db30e07
 
 ---
 
@@ -54,6 +57,8 @@ Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` Armb
 | Build workflow | YAML / `.github/workflows/armbian-builder.yaml` | Reusable: builds Armbian + downloads package + runs Packer + uploads artifact | `variant` input (lite/full); artifact named `{board}-dpx-buttonode-{ver}-{variant}-{commit}`; retention 3 days |
 | Release workflow | YAML / `.github/workflows/release-action.yaml` | Daily cron version check + matrix build + GitHub Release publish | Matrix: `board × variant` (rockpi-s + orangepizero3 × lite + full); version prefix-match on mirror asset name |
 | Package mirror | GitHub Release / tag `buttons-deb-mirror` | Hosts the Bitfocus `.tar.gz` for CI to download | **Maintainer updates this when Bitfocus ships a new version** |
+| Deck splash script | Python / `src/dpx-deck-splash/dpx-deck-splash.py` | Draws IP + mDNS hostname on the Stream Deck's keys during boot, before Buttons/Satellite/Companion claims the device | NOT stdlib-only (unlike the UI) — own venv at `/opt/dpx-deck-splash/venv` (`streamdeck` + `Pillow`); Phase 1 only, read-only, no keypress handling |
+| Deck splash install script | Bash / `scripts/install-deck-splash.sh` | Provisions the venv, installs the script + `dpx-deck-splash.service`, creates the low-priv `dpx-splash` user in the `buttons` group | Runs after `install-buttons.sh` — needs the `buttons` group + hidraw udev rule that package creates |
 
 ### Agent Rules (for this repo)
 
@@ -112,6 +117,7 @@ Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` Armb
 9. **`/boot/satellite-config` is a one-shot import.** Satellite reads it on startup and resets the file to prevent re-import on next boot. Our persistent store is `/etc/dpx-satellite.conf`. The UI writes both on every save.
 10. **HID device permissions — `satellite` user must be in `buttons` group.** The Buttons USB Relay udev rules own `/dev/hidraw*` as `root:buttons`. The `satellite` service user needs `usermod -aG buttons satellite` to open Stream Decks. This is done in `install-satellite.sh`. If a device was installed before this fix, run it manually once.
 11. **Satellite udev rules:** Installed at `/etc/udev/rules.d/50-satellite.rules` by the official install script. They set `GROUP="satellite"` for known vendor IDs — but the Buttons rule (installed earlier) wins for Stream Decks. The group fix (gotcha #10) is the correct solution; do not delete or reorder udev rules.
+12a. **hidapi has two Linux backends — hidraw and libusb — and only hidraw respects the Buttons udev rule.** `60-bitfocus-buttons.rules` grants group `buttons` access to `/dev/hidraw*` specifically (`KERNEL=="hidraw*"`). Installing `libhidapi-libusb0` instead of `libhidapi-hidraw0` would silently need different, unconfigured permissions (typically `plugdev` + a separate udev rule on `/dev/bus/usb/*`). `install-deck-splash.sh` installs the hidraw variant deliberately — don't swap it without also adding new udev rules.
 12. **Satellite REST API on port 9999:** `http://localhost:9999/api/config` — GET returns current config; POST `{"host":"...","port":16622}` updates it live. Used by the web UI's `/satellite-config` POST handler.
 
 ### Common Operations

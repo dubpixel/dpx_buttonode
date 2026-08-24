@@ -22,6 +22,20 @@ No external libraries needed. A pure-JS QR generator (e.g. `qrcode.js` inlined) 
 
 ---
 
+### Stream Deck HID Boot Splash
+**Status:** in progress — Phase 1 built on `feature/deck-hid-splash`, not yet hardware-validated `- [x]` Phase 1 code / `- [ ]` hardware test / `- [ ]` Phase 2 / `- [ ]` Phase 3
+
+Draw device status directly onto the attached Stream Deck's keys via HID, instead of requiring SSH or the
+web UI to find a fresh unit on the network.
+
+- **Phase 1** (done, pending hardware test): read-only splash — IP + mDNS hostname drawn during the boot
+  window before Buttons/Satellite/Companion claims the device. New `dpx-deck-splash.service`
+  (`Conflicts=bitfocus-buttons-usb-relay.service` for clean hand-off), own venv, low-priv `dpx-splash` user.
+- **Phase 2** (not started): deck keypress cycles operating mode (Buttons → Satellite → Companion), via a
+  narrowly-scoped sudoers rule calling the UI script's new `--apply-mode` CLI subcommand.
+- **Phase 3** (not started): deck keypress toggles DHCP ↔ last-known-static IP, via `--apply-net`. No
+  on-deck keyboard, so static IP entry itself still requires the web UI — this is flip-only.
+
 ### Network Discovery Page
 **Status:** partially done — Nodes tab shipped in v0.5.0 (LAN discovery via web UI); full server-side subnet scan still `- [ ]`
 
