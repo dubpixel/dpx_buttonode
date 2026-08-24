@@ -19,16 +19,19 @@ echo "==> Installing dpx-deck-splash"
 # is stdlib-only on purpose, and this is a different concern with real
 # dependencies. Isolated in its own venv.
 #
-# libhidapi-hidraw0 (not libhidapi-libusb0) matters: the Buttons .deb's
-# udev rule (60-bitfocus-buttons.rules) grants group `buttons` access to
-# /dev/hidraw* specifically. hidapi has two Linux backends — hidraw and
-# libusb — and only the hidraw backend respects that udev rule. Installing
-# the libusb variant would silently need different (unconfigured)
-# permissions.
+# libhidapi-libusb0, NOT libhidapi-hidraw0 — confirmed on real hardware
+# (Stream Deck MK.2). The `streamdeck` PyPI package (0.9.8) ships exactly
+# one real transport, StreamDeck/Transport/LibUSBHIDAPI.py — there is no
+# hidraw-native path in this library at all, so it hard-requires
+# libhidapi-libusb.so regardless of which backend "should" be simpler.
+# That in turn means USB-level permissions, not hidraw permissions: the
+# Buttons .deb's udev rule only grants `buttons` group access to
+# /dev/hidraw* (KERNEL=="hidraw*"), which does nothing for libusb — hence
+# the separate udev rule below on /dev/bus/usb/* instead.
 apt-get update -q
 apt-get install -y --no-install-recommends \
     python3-venv \
-    libhidapi-hidraw0 \
+    libhidapi-libusb0 \
     fonts-dejavu-core
 
 python3 -m venv /opt/dpx-deck-splash/venv
@@ -38,11 +41,20 @@ python3 -m venv /opt/dpx-deck-splash/venv
 # ── Script + user ────────────────────────────────────────────────────────────
 install -m 0755 /tmp/dpx-deck-splash.py /usr/local/bin/dpx-deck-splash.py
 
-# Low-priv user, `buttons` group only (hidraw access) — never runs as root.
+# Low-priv user, `buttons` group only — never runs as root.
 if ! id -u dpx-splash >/dev/null 2>&1; then
     adduser --system --no-create-home --shell /usr/sbin/nologin dpx-splash
 fi
 usermod -aG buttons dpx-splash
+
+# ── udev: USB-level access for the libusb HIDAPI transport ─────────────────
+# See the dependency comment above — streamdeck needs to open
+# /dev/bus/usb/*, not /dev/hidraw*. Buttons' own udev rule doesn't cover
+# this, so it's a separate rule here.
+cat > /etc/udev/rules.d/61-dpx-deck-splash.rules << 'UDEV'
+SUBSYSTEM=="usb", ATTR{idVendor}=="0fd9", MODE="0660", GROUP="buttons"
+UDEV
+udevadm control --reload-rules || true
 
 # ── systemd unit ──────────────────────────────────────────────────────────
 # Conflicts= gives a clean hand-off: the instant bitfocus-buttons-usb-relay
@@ -60,6 +72,12 @@ Conflicts=bitfocus-buttons-usb-relay.service
 
 [Service]
 Type=simple
+# PYTHONUNBUFFERED: without it, print() output sits in a block-io buffer
+# indefinitely under systemd (no tty) — confirmed on hardware, the service
+# was working correctly but its own success/failure logging wasn't
+# reaching the journal in real time. Not cosmetic-only; it made a real
+# working state look silently stuck during debugging.
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/dpx-deck-splash/venv/bin/python3 /usr/local/bin/dpx-deck-splash.py
 Restart=on-failure
 RestartSec=3

@@ -25,7 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hostname on the Stream Deck's keys during the boot window before Buttons/Satellite/Companion claims the
   device. New low-priv `dpx-splash` user, own venv (`streamdeck` + Pillow), `dpx-deck-splash.service` with
   `Conflicts=bitfocus-buttons-usb-relay.service` for a clean device hand-off. Read-only display only — no
-  keypress handling yet (Phase 2/3 planned: deck-triggered mode switch, DHCP/static toggle)
+  keypress handling yet (Phase 2/3 planned: deck-triggered mode switch, DHCP/static toggle).
+  **Hardware-validated 2026-08-24 on a Stream Deck MK.2** — required two live fixes not caught by CI: (1)
+  `streamdeck` needs `libhidapi-libusb0` + a new `/dev/bus/usb/*` udev rule, not `libhidapi-hidraw0` as
+  originally assumed (the library has no hidraw transport at all); (2) hostname now chunks onto keys on
+  word boundaries (`dpx`/`buttonode`/`2199`/`local`) instead of a fixed 6-char slice that broke words
+  mid-word; render_key() now shrinks font size to fit instead of a fixed size
 - `dpx-buttonode-ui.py`: extracted `switch_mode()` out of the inline `/mode` POST handler; added
   `--apply-mode`/`--apply-net` CLI subcommands (groundwork for Phase 2/3 above, no new privilege surface yet)
 

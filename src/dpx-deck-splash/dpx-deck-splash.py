@@ -79,12 +79,26 @@ def load_font(size):
 def render_key(deck, text, font_size=16):
     """One key, centered text, black background — deliberately simple,
     hardcoded for exactly the two fields we need (IP octet, hostname
-    fragment). Not a general text-wrap engine."""
+    segment). Not a general text-wrap engine.
+
+    Shrinks the font until the text fits the key width (with a small
+    margin) rather than letting a longer word (e.g. "buttonode") run off
+    the edge — segments are whole words now (see chunk_hostname), so
+    lengths vary more than the old fixed-character-count chunking did.
+    """
     image = PILHelper.create_key_image(deck)
     draw = ImageDraw.Draw(image)
-    font = load_font(font_size)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    margin = image.width * 0.12
+    size = font_size
+    while size > 7:
+        font = load_font(size)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        w = bbox[2] - bbox[0]
+        if w <= image.width - margin:
+            break
+        size -= 1
+    h = bbox[3] - bbox[1]
+    w = bbox[2] - bbox[0]
     pos = ((image.width - w) / 2, (image.height - h) / 2)
     draw.text(pos, text, font=font, fill="white")
     return PILHelper.to_native_key_format(deck, image)
@@ -108,11 +122,19 @@ def chunk_ip(ip, n):
 
 
 def chunk_hostname(name, n):
-    """Split hostname.local across n keys, left to right, truncated to fit."""
-    per_key = 6  # roughly what fits legibly at font_size=16 on a 72px key
-    chunks = [name[i:i + per_key] for i in range(0, len(name), per_key)]
-    chunks = chunks[:n]
-    return chunks + [""] * (n - len(chunks))
+    """Split 'dpx-buttonode-XXXX.local' across n keys on natural word
+    boundaries (-, .), one whole word per key — not a fixed character
+    count. render_key() shrinks the font to fit whatever lands on a key,
+    so a longer segment like "buttonode" still renders whole instead of
+    getting chopped mid-word (e.g. old output: "dpx-bu"/"ttonod"/"e-2199").
+    If there are more segments than keys, the overflow gets folded into
+    the last key rather than silently dropped.
+    """
+    segments = re.split(r"[-.]", name)
+    segments = [s for s in segments if s]
+    if len(segments) > n:
+        segments = segments[:n - 1] + ["-".join(segments[n - 1:])]
+    return segments + [""] * (n - len(segments))
 
 
 def draw_splash(deck, ip, mdns_name):

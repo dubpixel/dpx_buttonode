@@ -23,7 +23,7 @@ No external libraries needed. A pure-JS QR generator (e.g. `qrcode.js` inlined) 
 ---
 
 ### Stream Deck HID Boot Splash
-**Status:** in progress — Phase 1 built on `feature/deck-hid-splash`, not yet hardware-validated `- [x]` Phase 1 code / `- [ ]` hardware test / `- [ ]` Phase 2 / `- [ ]` Phase 3
+**Status:** in progress — Phase 1 hardware-validated on `feature/deck-hid-splash` (2026-08-24, Stream Deck MK.2) `- [x]` Phase 1 code / `- [x]` hardware test / `- [ ]` Phase 2 / `- [ ]` Phase 3
 
 Draw device status directly onto the attached Stream Deck's keys via HID, instead of requiring SSH or the
 web UI to find a fresh unit on the network.
