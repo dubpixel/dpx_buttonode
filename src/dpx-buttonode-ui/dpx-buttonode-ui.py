@@ -13,6 +13,7 @@ import os
 import re
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.parse
@@ -28,6 +29,7 @@ DPX_NET_OLD    = NETWORKD_DIR / "10-dpx-eth.network"   # remove if exists (old n
 NETPLAN_DIR    = Path("/etc/netplan")
 DPX_NETPLAN    = NETPLAN_DIR / "99-dpx-override.yaml"  # highest priority, beats armbian 10-
 MODE_FILE      = Path("/etc/dpx-mode")              # 'buttons', 'satellite', or 'companion'
+LAST_STATIC    = Path("/etc/dpx-last-static.conf")  # snapshot of static config, taken before a DHCP switch wipes it
 SAT_CONFIG     = Path("/etc/dpx-satellite.conf")    # our persistent satellite config
 SAT_BOOT_CFG   = Path("/boot/satellite-config")     # satellite's one-shot import file
 SATELLITE_API  = "http://localhost:9999"             # satellite REST API
@@ -243,6 +245,42 @@ def write_networkd_config(iface, mode, ip_cidr=None, gateway=None, dns="8.8.8.8"
     # Use systemd-run so this continues after our process exits.
     run(["systemd-run", "--no-block", "--quiet",
          "systemctl", "restart", "dpx-buttonode-ui"])
+
+
+def apply_net_toggle(target):
+    """Flip to DHCP or restore the last-known static config. No free-text IP
+    entry — this is for callers with no way to type an address (e.g. a deck
+    keypress). Returns (ok: bool, message: str).
+
+    write_networkd_config() deletes our static override file the moment it
+    switches to DHCP, so "restore static" can't just re-read that file — we
+    snapshot it to LAST_STATIC *before* wiping, and restore from there.
+    """
+    if target not in {"dhcp", "static"}:
+        return False, "Invalid target"
+    iface = get_primary_iface()
+    current = get_net_info()
+    if target == "dhcp":
+        if current["mode"] == "static":
+            LAST_STATIC.write_text(
+                f"IP_CIDR={current['ip_cidr']}\n"
+                f"GATEWAY={current['gateway']}\n"
+                f"DNS={current['dns']}\n"
+            )
+        write_networkd_config(iface, "dhcp")
+        return True, "Switched to DHCP"
+    # target == "static"
+    if not LAST_STATIC.exists():
+        return False, "No saved static config to restore"
+    cfg = {}
+    for line in LAST_STATIC.read_text().splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            cfg[k.strip()] = v.strip()
+    if not cfg.get("IP_CIDR"):
+        return False, "Saved static config incomplete"
+    write_networkd_config(iface, "static", cfg["IP_CIDR"], cfg.get("GATEWAY", ""), cfg.get("DNS", "8.8.8.8"))
+    return True, f"Restored static {cfg['IP_CIDR']}"
 
 
 def get_usb_devices():
@@ -653,6 +691,44 @@ def get_dpx_mode():
 def companion_installed():
     """True if full Companion is installed (Full image variant)."""
     return COMPANION_DIR.exists()
+
+
+def switch_mode(new_mode):
+    """Switch operating mode to 'buttons', 'satellite', or 'companion'.
+    Stops+disables the old service, enables+starts the new one, persists
+    the choice to MODE_FILE. Shared by the web UI's /mode handler and the
+    --apply-mode CLI subcommand (used by external callers like the deck
+    splash service). Returns (ok: bool, message: str).
+    """
+    valid = {"buttons", "satellite", "companion"}
+    if new_mode not in valid:
+        return False, "Invalid mode"
+    if new_mode == "companion" and not companion_installed():
+        return False, "Full Companion not installed — flash the Full image variant"
+    current = get_dpx_mode()
+    if new_mode == current:
+        return True, f"Already in {new_mode} mode"
+    SVC_MAP = {
+        "buttons":   "bitfocus-buttons-usb-relay",
+        "satellite": "satellite",
+        "companion": "companion",
+    }
+    old_svc = SVC_MAP.get(current, "bitfocus-buttons-usb-relay")
+    new_svc = SVC_MAP[new_mode]
+    # If switching TO satellite, stage the config before starting
+    if new_mode == "satellite":
+        host, port = get_satellite_config()
+        if host:
+            write_satellite_config(host, port)
+    run(["systemctl", "stop",    old_svc])
+    run(["systemctl", "disable", old_svc])
+    run(["systemctl", "enable",  new_svc])
+    _, err, rc = run(["systemctl", "start", new_svc])
+    if rc != 0:
+        return False, f"Failed to start {new_svc}: {err}"
+    MODE_FILE.write_text(new_mode + "\n")
+    LABELS = {"buttons": "Buttons USB Relay", "satellite": "Companion Satellite", "companion": "Bitfocus Companion"}
+    return True, f"Switched to {LABELS[new_mode]}"
 
 
 RELEASE_FILE = Path("/etc/dpx-buttonode-release")
@@ -1071,44 +1147,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # ── /mode ────────────────────────────────────────────────────────
         elif path == "/mode":
             new_mode = params.get("new_mode", "").strip()
-            valid = {"buttons", "satellite", "companion"}
-            if new_mode not in valid:
-                self.html(render_mode(alert="✗ Invalid mode", alert_cls="a-err"))
-                return
-            if new_mode == "companion" and not companion_installed():
-                self.html(render_mode(alert="✗ Full Companion not installed — flash the Full image variant", alert_cls="a-err"))
-                return
-            current = get_dpx_mode()
-            if new_mode == current:
-                self.redir("/mode")
-                return
-            SVC_MAP = {
-                "buttons":   "bitfocus-buttons-usb-relay",
-                "satellite": "satellite",
-                "companion": "companion",
-            }
-            old_svc = SVC_MAP.get(current, "bitfocus-buttons-usb-relay")
-            new_svc = SVC_MAP[new_mode]
-            # If switching TO satellite, stage the config before starting
-            if new_mode == "satellite":
-                host, port = get_satellite_config()
-                if host:
-                    write_satellite_config(host, port)
-            run(["systemctl", "stop",    old_svc])
-            run(["systemctl", "disable", old_svc])
-            run(["systemctl", "enable",  new_svc])
-            _, err, rc = run(["systemctl", "start", new_svc])
-            if rc != 0:
-                self.html(render_mode(
-                    alert=f"✗ Failed to start {esc(new_svc)}: {esc(err)}",
-                    alert_cls="a-err",
-                ))
-                return
-            MODE_FILE.write_text(new_mode + "\n")
-            LABELS = {"buttons": "Buttons USB Relay", "satellite": "Companion Satellite", "companion": "Bitfocus Companion"}
+            ok, msg = switch_mode(new_mode)
             self.html(render_mode(
-                alert=f"✓ Switched to {LABELS[new_mode]}",
-                alert_cls="a-ok",
+                alert=("✓ " if ok else "✗ ") + esc(msg),
+                alert_cls="a-ok" if ok else "a-err",
             ))
 
         # ── /satellite-config ──────────────────────────────────────────
@@ -1139,8 +1181,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
+#
+# --apply-mode <buttons|satellite|companion> and --apply-net <dhcp|static>
+# are internal CLI subcommands, not part of the web UI. They exist so a
+# privileged, narrowly-scoped caller (see /etc/sudoers.d/dpx-splash) can
+# trigger the exact same mode-switch / network-toggle logic the web UI uses,
+# without that caller needing to duplicate it or run with broad privilege
+# itself. Used by the deck splash service's keypress handlers.
 
 if __name__ == "__main__":
+    if len(sys.argv) >= 3 and sys.argv[1] == "--apply-mode":
+        ok, msg = switch_mode(sys.argv[2])
+        print(msg)
+        sys.exit(0 if ok else 1)
+    if len(sys.argv) >= 3 and sys.argv[1] == "--apply-net":
+        ok, msg = apply_net_toggle(sys.argv[2])
+        print(msg)
+        sys.exit(0 if ok else 1)
+
     server = http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print(f"dpx-buttonode-ui listening on :{PORT}")
     try:

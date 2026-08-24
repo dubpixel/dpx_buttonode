@@ -134,6 +134,28 @@ build {
     ]
   }
 
+  # Copy the deck-splash script + installer into the image.
+  # Runs after install-buttons.sh — needs the `buttons` group + hidraw
+  # udev rule that package creates.
+  provisioner "file" {
+    source      = "src/dpx-deck-splash/dpx-deck-splash.py"
+    destination = "/tmp/dpx-deck-splash.py"
+  }
+
+  provisioner "file" {
+    source      = "scripts/install-deck-splash.sh"
+    destination = "/tmp/install-deck-splash.sh"
+  }
+
+  provisioner "shell" {
+    execute_command = "chmod +x {{ .Path }}; {{ .Vars }} su root -c {{ .Path }}"
+    inline_shebang  = "/bin/bash -e"
+    inline = [
+      "chmod +x /tmp/install-deck-splash.sh",
+      "/tmp/install-deck-splash.sh"
+    ]
+  }
+
   # Copy the Companion Satellite install script into the image
   provisioner "file" {
     source      = "scripts/install-satellite.sh"
