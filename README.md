@@ -39,12 +39,13 @@
     <img src="images/logo.png" alt="Logo" height="120">
   </a>
 <h1 align="center">dpx-buttonode</h1>
-<h3 align="center"><i>Flash-ready Armbian images — Bitfocus Buttons USB Relay <strong>and</strong> Companion Satellite, switchable at runtime</i></h3>
+<h3 align="center"><i>Flash-ready Armbian images for Bitfocus Companion — Buttons USB Relay, Companion Satellite, and full Bitfocus Companion, switchable at runtime</i></h3>
   <p align="center">
     Automated GitHub Actions build pipeline that produces ready-to-flash <code>.img.gz</code> images
     for ARM single-board computers (Rock Pi S, Orange Pi Zero, etc.) with
-    <a href="https://bitfocus.io/buttons">Bitfocus Buttons USB Relay</a> <strong>and</strong>
-    <a href="https://github.com/bitfocus/companion-satellite">Companion Satellite</a> pre-installed.
+    <a href="https://bitfocus.io/buttons">Bitfocus Buttons USB Relay</a>,
+    <a href="https://github.com/bitfocus/companion-satellite">Bitfocus Companion Satellite</a>, and
+    (Full image variant) full <a href="https://bitfocus.io/companion">Bitfocus Companion</a> itself pre-installed.
     Switch between modes from the browser — no re-flash needed.
     Write the image, plug in your Stream Deck, power on — done.
     <br /><br />
@@ -170,10 +171,15 @@ All 150+ [Armbian-supported boards](https://www.armbian.com/download/) are avail
 
 #### 1. Download the image
 
-Go to [**Releases**](https://github.com/dubpixel/dpx_buttonode/releases) and download the `.img.gz` for your board:
+Go to [**Releases**](https://github.com/dubpixel/dpx_buttonode/releases) and download the `.img.gz` for your board.
+Each release ships two variants — pick one:
+
+- **`lite`** — Buttons USB Relay + Companion Satellite (smaller image, the default)
+- **`full`** — everything in `lite`, plus full [Bitfocus Companion](https://bitfocus.io/companion) itself installed
 
 ```
-rockpi-s-dpx-buttonode-0.1.0-beta.4.img.gz
+rockpi-s-dpx-buttonode-<version>-lite.img.gz
+rockpi-s-dpx-buttonode-<version>-full.img.gz
 ```
 
 #### 2. Flash to SD card
