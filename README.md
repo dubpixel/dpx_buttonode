@@ -343,29 +343,31 @@ http://dpx-buttonode-XXXX.local:8080
 
 ### SSH into the device
 
-SSH is **enabled by default**. As soon as the board is on the network:
+SSH ships **disabled**, and there's no hardcoded default credential — enable it from the web UI's **SSH**
+tab. On first boot, a random per-device root password is generated automatically and shown two places
+until you change it: on the **SSH** tab itself, and on the Stream Deck's screen (if one's attached), on a
+dedicated key in the action row.
+
+1. Open the web UI (`http://dpx-buttonode-XXXX.local:8080`) → **SSH** tab, or check the deck screen, for the
+   generated password.
+2. Enter it in the **Enable SSH** form (or just use it to `ssh` in directly — SSH being off just means the
+   `ssh` service isn't running yet; enabling it from the UI starts it).
+3. **Set your own password** via the same tab — this deletes the generated one everywhere it was shown.
 
 ```bash
 ssh root@dpx-buttonode-XXXX.local
 # where XXXX is the last 4 hex chars of the board's MAC address
-# Default password: 1234
 ```
 
 If mDNS isn't resolving, find the IP from your router and use that directly.
 
-> ⚠️ **Security warning — read before deploying anywhere untrusted.**
-> Every image ships with SSH enabled and the same hardcoded root password
-> (`1234`, Armbian's own default) — this is **not** rotated or randomized
-> per build. Armbian's "forces a password change on first login" only
-> applies to an actual interactive terminal session; it does **not**
-> trigger for scripted/automated SSH access (e.g. `ssh root@host cmd`),
-> so `root/1234` stays valid indefinitely unless you change it yourself.
-> There is currently no SSH key option, no way to disable SSH from the
-> web UI, and no CI-time flag to strip SSH or randomize the password on
-> images built for public release. **Change the root password yourself
-> immediately after first boot** (`passwd`) if the device will ever sit
-> on a network you don't fully trust. Tracked for a real fix — see the
-> Roadmap.
+> ⚠️ **Why this exists.** Every action on the SSH tab requires the *current* root password — that page has
+> no login of its own (plain HTTP, reachable by anyone on the LAN), so without this check, "enable SSH from
+> the web UI" would let anyone on the network turn SSH on with a password of their own choosing, no
+> guessing required. Requiring the current password keeps the bar at "you already have root," the same as
+> SSH access always implied, just reachable through the browser too. This is aimed at keeping honest people
+> honest on a home/studio LAN — it is **not** hardened against a determined attacker with sustained LAN
+> access. See `AGENTS.md` gotcha 10a for implementation details.
 
 ---
 

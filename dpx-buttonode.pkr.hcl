@@ -86,6 +86,12 @@ build {
     destination = "/tmp/dpx-set-hostname.sh"
   }
 
+  # Copy the first-boot SSH password generator (installed by install-buttons.sh)
+  provisioner "file" {
+    source      = "scripts/dpx-init-ssh.sh"
+    destination = "/tmp/dpx-init-ssh.sh"
+  }
+
   # Copy the device config web UI (installed to /usr/local/bin by install-buttons.sh)
   provisioner "file" {
     source      = "src/dpx-buttonode-ui/dpx-buttonode-ui.py"
@@ -108,9 +114,12 @@ build {
       "echo dpx-buttonode > /etc/hostname",
       "sed -i \"s/127.0.1.1.*/127.0.1.1\\tdpx-buttonode/\" /etc/hosts || true",
 
-      # SSH enabled for remote access and debugging
-      # Login: root / 1234  (Armbian forces a password change on first login)
-      "systemctl enable ssh || true",
+      # SSH DISABLED by default — no default credential to ship at all.
+      # dpx-init-ssh.service generates a random per-device root password
+      # on first boot (shown on the deck splash + the web UI's SSH tab
+      # until changed); the web UI's SSH tab is the only way to enable
+      # SSH itself. See README's security section / AGENTS.md gotcha 10a.
+      "systemctl disable ssh || true",
 
       # Write build metadata — readable by dpx-buttonode-ui Status page
       "echo 'DPX_VERSION=${var.dpx_version}' > /etc/dpx-buttonode-release",

@@ -64,6 +64,35 @@ UNIT
 systemctl enable dpx-set-hostname.service
 echo "==> dpx-set-hostname.service: enabled"
 
+# ── First-boot SSH password (SSH itself stays disabled — see main shell
+# provisioner) ───────────────────────────────────────────────────────────
+# Runs after dpx-set-hostname since ordering doesn't matter between them,
+# but both need to be done well before anyone could plausibly reach the
+# web UI or a deck.
+echo "==> Installing dpx-init-ssh"
+
+install -m 0755 /tmp/dpx-init-ssh.sh /usr/local/bin/dpx-init-ssh.sh
+
+cat > /etc/systemd/system/dpx-init-ssh.service << 'UNIT'
+[Unit]
+Description=Generate a random per-device root password on first boot
+Documentation=https://github.com/dubpixel/dpx_buttonode
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/dpx-init-ssh.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl enable dpx-init-ssh.service
+echo "==> dpx-init-ssh.service: enabled"
+
 # ── dpx-buttonode-ui (device config web UI on port 8080) ─────────────────────
 echo "==> Installing dpx-buttonode-ui"
 

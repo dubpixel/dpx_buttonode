@@ -8,10 +8,12 @@ Port:      8080
 Zero external dependencies — uses Python 3 stdlib only.
 """
 
+import crypt
 import http.server
 import os
 import re
 import socket
+import spwd
 import subprocess
 import sys
 import threading
@@ -29,6 +31,7 @@ DPX_NET_OLD    = NETWORKD_DIR / "10-dpx-eth.network"   # remove if exists (old n
 NETPLAN_DIR    = Path("/etc/netplan")
 DPX_NETPLAN    = NETPLAN_DIR / "99-dpx-override.yaml"  # highest priority, beats armbian 10-
 MODE_FILE      = Path("/etc/dpx-mode")              # 'buttons', 'satellite', or 'companion'
+INITIAL_SSH_PASSWORD_FILE = Path("/etc/dpx-initial-ssh-password")  # written by dpx-init-ssh.sh; cleared once the user sets their own
 SAT_CONFIG     = Path("/etc/dpx-satellite.conf")    # our persistent satellite config
 SAT_BOOT_CFG   = Path("/boot/satellite-config")     # satellite's one-shot import file
 SATELLITE_API  = "http://localhost:9999"             # satellite REST API
@@ -462,6 +465,7 @@ def page(content, tab="status", alert="", alert_cls="a-ok"):
         ("devices",  "/devices",  "Devices"),
         ("nodes",    "/nodes",    "Nodes"),
         ("mode",     "/mode",     "Mode"),
+        ("ssh",      "/ssh",      "SSH"),
     ]
     nav = "".join(
         f'<a href="{u}" class="{"on" if t == tab else ""}">{n}</a>'
@@ -760,6 +764,81 @@ def switch_mode(new_mode):
     return True, f"Switched to {LABELS[new_mode]}"
 
 
+# ── SSH management ───────────────────────────────────────────────────────────
+#
+# Ships with SSH DISABLED by default (see dpx-buttonode.pkr.hcl) — this is
+# the only management surface for it, and this web UI itself has NO
+# authentication of its own (plain HTTP, no login, reachable by anyone on
+# the LAN). That matters a lot here: without the check below, "enable SSH
+# from the web UI" would be *worse* than the old always-on root/1234
+# default — it'd let anyone on the LAN turn SSH on with a password of
+# their own choosing, no guessing required at all. So every action here
+# requires proving you already know the CURRENT root password first,
+# verified directly against /etc/shadow (this process runs as root, so it
+# can read that itself — no separate secret needs storing). That keeps the
+# security bar at "you already have root," same as SSH access always was,
+# just reachable through the browser too.
+
+def verify_root_password(candidate):
+    """True if `candidate` matches root's actual login password, checked
+    against /etc/shadow directly. `crypt` is deprecated (removal targeted
+    for a future Python — not yet gone as of the 3.12 this ships on) but
+    there's no stdlib replacement for "verify a Unix password hash" yet;
+    revisit if/when the target Armbian base moves to a Python without it.
+    """
+    try:
+        stored_hash = spwd.getspnam("root").sp_pwdp
+        if not stored_hash or stored_hash in ("*", "!", "!!", ""):
+            return False  # locked/no-password account — never treat as a match
+        return crypt.crypt(candidate, stored_hash) == stored_hash
+    except Exception:
+        return False
+
+
+def ssh_enabled():
+    return svc_active("ssh")
+
+
+def get_initial_ssh_password():
+    """The random password dpx-init-ssh.sh generated at first boot, or
+    None once the user has set their own (the file is deleted the moment
+    change_root_password() succeeds — see below)."""
+    try:
+        return INITIAL_SSH_PASSWORD_FILE.read_text().strip() or None
+    except Exception:
+        return None
+
+
+def set_ssh_enabled(enable):
+    if enable:
+        run(["systemctl", "enable", "--now", "ssh"])
+    else:
+        run(["systemctl", "disable", "--now", "ssh"])
+
+
+def change_root_password(new_password):
+    """Sets root's password via chpasswd. Rejects newlines outright — the
+    "user:password\\n" stdin format chpasswd expects means an embedded
+    newline could inject a second line/command into that stream.
+    """
+    if "\n" in new_password or "\r" in new_password:
+        return False, "Password cannot contain newlines"
+    if len(new_password) < 8:
+        return False, "Password must be at least 8 characters"
+    r = subprocess.run(
+        ["chpasswd"], input=f"root:{new_password}\n", text=True, capture_output=True
+    )
+    if r.returncode != 0:
+        return False, (r.stderr.strip() or "Failed to set password")
+    # The generated initial password is now stale/wrong — stop showing it
+    # anywhere (web UI, deck splash) the moment a real one is set.
+    try:
+        INITIAL_SSH_PASSWORD_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return True, "Root password updated"
+
+
 
 RELEASE_FILE = Path("/etc/dpx-buttonode-release")
 
@@ -910,6 +989,72 @@ def render_mode(alert="", alert_cls="a-ok"):
     return page(body, "mode", alert, alert_cls)
 
 
+def render_ssh(alert="", alert_cls="a-ok"):
+    enabled = ssh_enabled()
+    badge = '<span class="badge badge-on">enabled</span>' if enabled else '<span class="badge badge-off">disabled</span>'
+    initial_pw = get_initial_ssh_password()
+
+    initial_pw_box = f"""
+<div class="sec" style="border:2px solid #e3b341">
+  <h2>⚠ Your Current Root Password</h2>
+  <p class="note">
+    Generated randomly on first boot — also shown on the Stream Deck screen if one's attached.
+    Use this to enable SSH or set a real password below. It disappears from here (and the deck)
+    the moment you change it.
+  </p>
+  <div style="font-size:22px;font-weight:700;font-family:monospace;color:#e3b341;
+              background:#161b22;border-radius:8px;padding:14px 18px;margin-top:10px;
+              letter-spacing:1px;display:inline-block">{esc(initial_pw)}</div>
+</div>""" if initial_pw else ""
+
+    toggle_form = (
+        f'<form method="POST" action="/ssh" style="display:inline">'
+        f'<input type="hidden" name="action" value="{"disable" if enabled else "enable"}">'
+        f'<input name="current_password" type="password" placeholder="Current root password" required '
+        f'style="background:#161b22;border:1px solid #30363d;color:#f0f6ff;border-radius:6px;'
+        f'padding:7px 10px;font-size:13px;margin-right:8px">'
+        f'<button type="submit" class="btn {"btn-p" if not enabled else ""}">'
+        f'{"Disable SSH" if enabled else "Enable SSH"}</button>'
+        f'</form>'
+    )
+
+    body = f"""
+{initial_pw_box}
+<div class="sec">
+  <h2>SSH Access</h2>
+  <p class="note">Status: {badge}</p>
+  <p class="note" style="margin-top:6px">
+    Ships <strong>disabled by default</strong>. Every action here requires the current root
+    password — this page itself has no login of its own, so that's the only thing stopping
+    anyone on the LAN from flipping SSH on for themselves.
+  </p>
+  <div style="margin-top:14px">{toggle_form}</div>
+</div>
+<div class="sec">
+  <h2>Change Root Password</h2>
+  <form method="POST" action="/ssh">
+    <input type="hidden" name="action" value="change-password">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+      <tr>
+        <td style="padding:6px 0;color:#8b949e;font-size:13px;width:150px">Current password</td>
+        <td><input name="current_password" type="password" required
+                   style="width:100%;max-width:280px;background:#161b22;border:1px solid #30363d;
+                          color:#f0f6ff;border-radius:6px;padding:7px 10px;font-size:13px"></td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;color:#8b949e;font-size:13px">New password</td>
+        <td><input name="new_password" type="password" minlength="8" required
+                   placeholder="8+ characters"
+                   style="width:100%;max-width:280px;background:#161b22;border:1px solid #30363d;
+                          color:#f0f6ff;border-radius:6px;padding:7px 10px;font-size:13px"></td>
+      </tr>
+    </table>
+    <button type="submit" class="btn btn-p">Change Password</button>
+  </form>
+</div>"""
+    return page(body, "ssh", alert, alert_cls)
+
+
 # ── Request handler ────────────────────────────────────────────────────────────
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -979,6 +1124,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.html(render_nodes(alert, alert_cls))
         elif path == "/mode":
             self.html(render_mode(alert, alert_cls))
+        elif path == "/ssh":
+            self.html(render_ssh(alert, alert_cls))
         elif path in ("/favicon.png", "/favicon.ico"):
             favicon = Path("/usr/local/bin/fav_icon.png")
             if favicon.exists():
@@ -1206,6 +1353,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     pass  # best-effort; config is also staged for next start
                 run(["systemctl", "restart", "satellite"])
             self.html(render_mode(alert="✓ Satellite config saved", alert_cls="a-ok"))
+
+        # ── /ssh ────────────────────────────────────────────────────────
+        elif path == "/ssh":
+            action = params.get("action", "")
+            current_password = params.get("current_password", "")
+            if not verify_root_password(current_password):
+                self.html(render_ssh(alert="✗ Incorrect current password", alert_cls="a-err"))
+                return
+            if action == "enable":
+                set_ssh_enabled(True)
+                self.html(render_ssh(alert="✓ SSH enabled", alert_cls="a-ok"))
+            elif action == "disable":
+                set_ssh_enabled(False)
+                self.html(render_ssh(alert="✓ SSH disabled", alert_cls="a-ok"))
+            elif action == "change-password":
+                ok, msg = change_root_password(params.get("new_password", ""))
+                self.html(render_ssh(alert=("✓ " if ok else "✗ ") + esc(msg), alert_cls="a-ok" if ok else "a-err"))
+            else:
+                self.html(render_ssh(alert="✗ Invalid action", alert_cls="a-err"))
+
         else:
             self.html("<html><body><h1>Not found</h1></body></html>", 404)
 

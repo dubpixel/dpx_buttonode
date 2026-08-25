@@ -36,6 +36,13 @@ times). Now, if the deck has a third key row:
   if STATIC is staged, since re-pinning is idempotent and cheap). This
   exists specifically so a single mis-press of MODE or NET can't switch
   anything by itself — you set up the whole screen, then commit once.
+- SSH key (between SUBNET and GO, decks with >=5 columns only) — a pure
+  readout, no press action. Shows the random root password
+  dpx-init-ssh.sh generated at first boot, for as long as it's still
+  active (blank once the user sets a real password via the web UI's SSH
+  tab, which deletes the file this reads). SSH ships disabled with no
+  hardcoded default credential at all; this is how a per-device
+  first-boot password actually reaches someone standing at the unit.
 
 This script never touches systemctl, netplan, or /etc/dpx-mode directly —
 it shells out via `sudo` to dpx-buttonode-ui.py's `--apply-mode
@@ -85,6 +92,7 @@ OCTET_STEP_SECONDS = 0.15    # how fast a held octet key spins its value
 UI_SCRIPT = "/usr/local/bin/dpx-buttonode-ui.py"
 MODE_FILE = Path("/etc/dpx-mode")
 COMPANION_DIR = Path("/opt/companion")
+INITIAL_SSH_PASSWORD_FILE = Path("/etc/dpx-initial-ssh-password")
 MODE_ORDER = ["buttons", "satellite", "companion"]
 MODE_LABELS = {"buttons": "BTN", "satellite": "SAT", "companion": "CMP"}
 SUBNET_OPTIONS = [24, 22, 16, 8]
@@ -158,6 +166,16 @@ def get_current_mode():
         return "buttons"
 
 
+def get_initial_ssh_password():
+    """The random password dpx-init-ssh.sh generated at first boot, or
+    None once dpx-buttonode-ui.py's change_root_password() has deleted
+    it (i.e. the user set a real password)."""
+    try:
+        return INITIAL_SSH_PASSWORD_FILE.read_text().strip() or None
+    except Exception:
+        return None
+
+
 def next_mode(current):
     """Next candidate in the cycle, skipping Companion if not installed."""
     idx = MODE_ORDER.index(current) if current in MODE_ORDER else 0
@@ -189,6 +207,7 @@ NET_MODE_COLORS = {
 }
 SUBNET_COLOR = (90, 90, 90)    # neutral gray — a setting, not a mode
 GO_COLOR = (20, 175, 60)       # bright green — the one key that actually does something
+SSH_PW_COLOR = (150, 130, 20)  # amber-brown — the first-boot initial root password, if still active
 FLASH_COLOR = (255, 200, 0)    # amber flash — instant "press registered" feedback
 EDIT_COLOR = (0, 170, 190)     # cyan — an octet currently being edited, not yet committed
 DISABLED_FG = (110, 110, 110)  # dimmed text for octets locked while DHCP is staged
@@ -281,15 +300,21 @@ def chunk_hostname(name, n):
 
 
 def action_key_indices(deck):
-    """Key indices for the four action-row keys, or all-None if the deck
+    """Key indices for the action-row keys, or all-None if the deck
     doesn't have a third row (e.g. a 2-row Mini) — Phase 2/3 is simply
     unavailable on decks that small, not an error. GO is always the
-    LAST key in the row (bottom-right), regardless of column count."""
+    LAST key in the row (bottom-right), regardless of column count.
+    ssh_key (shows the first-boot initial root password, if still
+    active) sits between SUBNET and GO — only on decks with room for it
+    (cols >= 5); on a narrower 3-row deck it'd collide with GO, so it's
+    simply omitted (None) there rather than fought over."""
     rows, cols = deck.key_layout()
     if rows < 3:
-        return None, None, None, None
+        return None, None, None, None, None
     base = 2 * cols
-    return base, base + 1, base + 2, base + (cols - 1)
+    go_key = base + (cols - 1)
+    ssh_key = base + 3 if cols >= 5 else None
+    return base, base + 1, base + 2, ssh_key, go_key
 
 
 def draw_mode_key(deck, key, mode_pending):
@@ -312,11 +337,26 @@ def draw_go_key(deck, key):
     deck.set_key_image(key, render_key(deck, "GO", font_size=18, bg=GO_COLOR))
 
 
+def draw_ssh_key(deck, key):
+    """Shows the first-boot random root password (see dpx-init-ssh.sh) —
+    or blank once it's been superseded by a real password (the file gets
+    deleted the moment dpx-buttonode-ui.py's change_root_password()
+    succeeds). Readable here because dpx-splash is already in the
+    `buttons` group for HID access, and the file's group is set to match
+    (root:buttons, 0640) — same permission model as everything else this
+    process reads, no new privilege needed."""
+    pw = get_initial_ssh_password()
+    if pw:
+        deck.set_key_image(key, render_key(deck, pw, font_size=13, bg=SSH_PW_COLOR))
+    else:
+        deck.set_key_image(key, blank_key(deck))
+
+
 def draw_splash(deck, ip, mdns_name, state):
     """state = {"mode_pending", "net_pending", "prefix_pending", "ip_edit", "busy"}"""
     rows, cols = deck.key_layout()
     total = deck.key_count()
-    mode_key, net_key, subnet_key, go_key = action_key_indices(deck)
+    mode_key, net_key, subnet_key, ssh_key, go_key = action_key_indices(deck)
     octet_keys = octet_key_indices(deck)
     live_octets = ip.split(".") if ip else []
     host_row = chunk_hostname(mdns_name, cols) if rows >= 2 else []
@@ -330,6 +370,8 @@ def draw_splash(deck, ip, mdns_name, state):
             draw_net_key(deck, i, state["net_pending"])
         elif i == subnet_key:
             draw_subnet_key(deck, i, state["prefix_pending"])
+        elif ssh_key is not None and i == ssh_key:
+            draw_ssh_key(deck, i)
         elif i == go_key:
             draw_go_key(deck, i)
         elif r == 0 and octet_keys and c < 4:
@@ -480,7 +522,8 @@ def make_key_callback(state):
 
     def on_key(deck, key, pressed):
         now = time.monotonic()
-        mode_key, net_key, subnet_key, go_key = action_key_indices(deck)
+        mode_key, net_key, subnet_key, _ssh_key, go_key = action_key_indices(deck)
+        # _ssh_key is a pure readout (the first-boot password) — no press action
         octet_keys = octet_key_indices(deck)
 
         if octet_keys and key in octet_keys:
