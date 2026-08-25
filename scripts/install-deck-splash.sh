@@ -88,6 +88,18 @@ RestartSec=3
 User=dpx-splash
 StandardOutput=journal
 StandardError=journal
+# KillMode=process, NOT the default control-group — confirmed on hardware
+# this is load-bearing, not just tidiness. A MODE/NET keypress spawns a
+# `sudo ...` child in a daemon thread; that child's own action (starting
+# whichever mode service the user just switched to) is exactly what
+# triggers Conflicts= to stop THIS service. With the default
+# control-group KillMode, systemd kills the whole cgroup — including that
+# in-flight sudo child — the moment the conflict fires, cutting
+# switch_mode()/toggle_net() off mid-execution (observed: the systemctl
+# start succeeded, but execution never reached the /etc/dpx-mode write
+# that comes after it). KillMode=process only signals the main PID, so
+# the already-running privileged child is left alone to finish.
+KillMode=process
 
 [Install]
 WantedBy=multi-user.target
@@ -98,13 +110,20 @@ echo "==> dpx-deck-splash.service: enabled"
 
 # ── sudoers: the ONLY door from dpx-splash (buttons group, nothing else)
 # to actually changing system state ─────────────────────────────────────────
-# Two fixed, argument-free commands, nothing else. cycle_mode()/toggle_net()
-# in dpx-buttonode-ui.py work out their own target from current state, so
-# there's no argument value here for a compromised/buggy caller to smuggle
-# something through — the whole line either matches exactly or it doesn't.
+# The deck does its own select/cycle/edit UI locally (short press advances
+# a candidate, long press commits) and only calls in here with the final
+# chosen value. --apply-mode/--toggle-net are fully enumerated/argument-
+# free, nothing to smuggle through. --pin-static <ip> can't be enumerated
+# the same way (any of ~4 billion IPs) — its sudoers line is a loose glob
+# gate, and pin_static()'s own validate_ip() call in dpx-buttonode-ui.py
+# is the REAL validation. The glob still blocks anything not starting
+# with digit.digit.digit.digit shaped input.
 cat > /etc/sudoers.d/dpx-splash << 'SUDOERS'
-dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --cycle-mode
+dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --apply-mode buttons
+dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --apply-mode satellite
+dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --apply-mode companion
 dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --toggle-net
+dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --pin-static [0-9]*.[0-9]*.[0-9]*.[0-9]*
 SUDOERS
 chmod 0440 /etc/sudoers.d/dpx-splash
 visudo -cf /etc/sudoers.d/dpx-splash

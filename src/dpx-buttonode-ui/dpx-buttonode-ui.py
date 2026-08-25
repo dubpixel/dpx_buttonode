@@ -29,7 +29,6 @@ DPX_NET_OLD    = NETWORKD_DIR / "10-dpx-eth.network"   # remove if exists (old n
 NETPLAN_DIR    = Path("/etc/netplan")
 DPX_NETPLAN    = NETPLAN_DIR / "99-dpx-override.yaml"  # highest priority, beats armbian 10-
 MODE_FILE      = Path("/etc/dpx-mode")              # 'buttons', 'satellite', or 'companion'
-LAST_STATIC    = Path("/etc/dpx-last-static.conf")  # snapshot of static config, taken before a DHCP switch wipes it
 SAT_CONFIG     = Path("/etc/dpx-satellite.conf")    # our persistent satellite config
 SAT_BOOT_CFG   = Path("/boot/satellite-config")     # satellite's one-shot import file
 SATELLITE_API  = "http://localhost:9999"             # satellite REST API
@@ -239,59 +238,70 @@ def write_networkd_config(iface, mode, ip_cidr=None, gateway=None, dns="8.8.8.8"
     # Re-announce mDNS on the new address
     run(["systemctl", "reload-or-restart", "avahi-daemon"])
     time.sleep(0.5)
-    # Reconnect Buttons
-    run(["systemctl", "restart", "bitfocus-buttons-usb-relay"])
+    # Reconnect whichever mode service is actually active — used to be a
+    # hardcoded restart of bitfocus-buttons-usb-relay from when Buttons was
+    # always the default; wrong now that Satellite/Companion can be active.
+    active_svc = {
+        "buttons": "bitfocus-buttons-usb-relay",
+        "satellite": "satellite",
+        "companion": "companion",
+    }.get(get_dpx_mode(), "bitfocus-buttons-usb-relay")
+    run(["systemctl", "restart", active_svc])
     # Restart ourselves — the server socket breaks when the IP changes.
     # Use systemd-run so this continues after our process exits.
     run(["systemd-run", "--no-block", "--quiet",
          "systemctl", "restart", "dpx-buttonode-ui"])
 
 
-def apply_net_toggle(target):
-    """Flip to DHCP or restore the last-known static config. No free-text IP
-    entry — this is for callers with no way to type an address (e.g. a deck
-    keypress). Returns (ok: bool, message: str).
+def toggle_net():
+    """Flip DHCP<->static. No argument needed — a caller with no way to
+    type an address (a deck keypress) should have nothing to get wrong.
 
-    write_networkd_config() deletes our static override file the moment it
-    switches to DHCP, so "restore static" can't just re-read that file — we
-    snapshot it to LAST_STATIC *before* wiping, and restore from there.
+    Going TO static freezes whatever IP is currently DHCP-assigned as the
+    new static config — not a restore of some previously-saved value.
+    Simpler and more broadly useful: it works the very first time, on a
+    device that's never been static before, instead of failing with
+    "nothing saved" (the original design required a prior static config
+    to exist before you could ever toggle to static at all — confirmed on
+    hardware that this is confusing on a fresh device). Going back to
+    DHCP just requests a fresh lease; toggling to static again later
+    freezes whatever that new lease happens to be, which is more useful
+    than replaying stale historical values anyway.
+
+    Returns (ok: bool, message: str).
     """
-    if target not in {"dhcp", "static"}:
-        return False, "Invalid target"
     iface = get_primary_iface()
     current = get_net_info()
-    if target == "dhcp":
-        if current["mode"] == "static":
-            LAST_STATIC.write_text(
-                f"IP_CIDR={current['ip_cidr']}\n"
-                f"GATEWAY={current['gateway']}\n"
-                f"DNS={current['dns']}\n"
-            )
-        write_networkd_config(iface, "dhcp")
-        return True, "Switched to DHCP"
-    # target == "static"
-    if not LAST_STATIC.exists():
-        return False, "No saved static config to restore"
-    cfg = {}
-    for line in LAST_STATIC.read_text().splitlines():
-        if "=" in line:
-            k, _, v = line.partition("=")
-            cfg[k.strip()] = v.strip()
-    if not cfg.get("IP_CIDR"):
-        return False, "Saved static config incomplete"
-    write_networkd_config(iface, "static", cfg["IP_CIDR"], cfg.get("GATEWAY", ""), cfg.get("DNS", "8.8.8.8"))
-    return True, f"Restored static {cfg['IP_CIDR']}"
+    if current["mode"] == "dhcp":
+        if not current.get("gateway"):
+            return False, "No gateway detected — can't safely pin a static config"
+        write_networkd_config(iface, "static", current["ip_cidr"], current["gateway"], current["dns"])
+        return True, f"Pinned static {current['ip_cidr']}"
+    write_networkd_config(iface, "dhcp")
+    return True, "Switched to DHCP"
 
 
-def toggle_net():
-    """Flip DHCP<->static based on whatever the current mode actually is —
-    no argument needed. Same rationale as cycle_mode(): a caller with no
-    way to specify or validate a target (a deck keypress, via a
-    narrowly-scoped sudoers rule) should have nothing to get wrong.
+def pin_static(ip_str):
+    """Apply a specific, fully user-chosen static IP address (all four
+    octets), keeping the CURRENTLY DETECTED gateway/DNS and subnet
+    prefix length unchanged — the deck's per-octet edit-and-commit flow
+    (hold an octet key to advance its value, long-press NET to commit)
+    calls this with the IP it built up. Unlike --apply-mode's three
+    enumerated sudoers values, sudoers can only glob-match this
+    argument loosely (see install-deck-splash.sh) — this function,
+    using the same validate_ip() the web UI's own network form uses, is
+    the real gate. Returns (ok, msg).
     """
+    if not validate_ip(ip_str):
+        return False, "Invalid IP address"
+    iface = get_primary_iface()
     current = get_net_info()
-    target = "static" if current["mode"] == "dhcp" else "dhcp"
-    return apply_net_toggle(target)
+    if not current.get("gateway"):
+        return False, "No gateway detected — can't safely pin a static config"
+    prefix = current["ip_cidr"].split("/")[-1] if "/" in current["ip_cidr"] else "24"
+    ip_cidr = f"{ip_str}/{prefix}"
+    write_networkd_config(iface, "static", ip_cidr, current["gateway"], current["dns"])
+    return True, f"Pinned static {ip_cidr}"
 
 
 def get_usb_devices():
@@ -741,23 +751,6 @@ def switch_mode(new_mode):
     LABELS = {"buttons": "Buttons USB Relay", "satellite": "Companion Satellite", "companion": "Bitfocus Companion"}
     return True, f"Switched to {LABELS[new_mode]}"
 
-
-def cycle_mode():
-    """Advance to the next mode in sequence: buttons -> satellite ->
-    companion (skipped if not installed) -> buttons. No arguments — this
-    is deliberately a fixed, no-input action so a caller (e.g. the deck's
-    mode keypress, via a narrowly-scoped sudoers rule) needs zero argument
-    validation to invoke it safely. Returns (ok: bool, message: str).
-    """
-    order = ["buttons", "satellite", "companion"]
-    current = get_dpx_mode()
-    idx = order.index(current) if current in order else 0
-    for _ in range(len(order)):
-        idx = (idx + 1) % len(order)
-        candidate = order[idx]
-        if candidate != "companion" or companion_installed():
-            return switch_mode(candidate)
-    return False, "No other mode available"
 
 
 RELEASE_FILE = Path("/etc/dpx-buttonode-release")
@@ -1211,22 +1204,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 #
-# --cycle-mode and --toggle-net are internal CLI subcommands, not part of
-# the web UI. They exist so a privileged, narrowly-scoped caller (see
+# --apply-mode <buttons|satellite|companion>, --toggle-net, and
+# --pin-static <ip> are internal CLI subcommands, not part of the web UI.
+# They exist so a privileged, narrowly-scoped caller (see
 # /etc/sudoers.d/dpx-splash) can trigger the exact same mode-switch /
-# network-toggle logic the web UI uses, without duplicating it or running
-# with broad privilege itself. Used by the deck splash service's keypress
-# handlers. Deliberately no arguments — cycle_mode()/toggle_net() work out
-# the target themselves from current state, so the sudoers rule can
-# whitelist these two exact command lines with nothing left to validate.
+# network logic the web UI uses, without duplicating it or running with
+# broad privilege itself. Used by the deck splash service's keypress
+# handlers — the deck does its own select/cycle UI locally (short press
+# advances a not-yet-committed candidate, long press commits) and only
+# calls in here with the final chosen value.
+#
+# --apply-mode's sudoers rule whitelists exactly the three valid mode
+# values as three separate fixed command lines — no wildcard, nothing to
+# validate beyond an exact string match. --pin-static can't be enumerated
+# that way (any of ~4 billion IPs), so its sudoers rule is a loose glob
+# instead — pin_static()'s own validate_ip() call is the real gate there,
+# not sudoers. switch_mode() rejects anything invalid the same way.
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 2 and sys.argv[1] == "--cycle-mode":
-        ok, msg = cycle_mode()
+    if len(sys.argv) >= 3 and sys.argv[1] == "--apply-mode":
+        ok, msg = switch_mode(sys.argv[2])
         print(msg)
         sys.exit(0 if ok else 1)
     if len(sys.argv) >= 2 and sys.argv[1] == "--toggle-net":
         ok, msg = toggle_net()
+        print(msg)
+        sys.exit(0 if ok else 1)
+    if len(sys.argv) >= 3 and sys.argv[1] == "--pin-static":
+        ok, msg = pin_static(sys.argv[2])
         print(msg)
         sys.exit(0 if ok else 1)
 
