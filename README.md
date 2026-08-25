@@ -344,15 +344,20 @@ http://dpx-buttonode-XXXX.local:8080
 ### SSH into the device
 
 SSH ships **disabled**, and there's no hardcoded default credential — enable it from the web UI's **SSH**
-tab. On first boot, a random per-device root password is generated automatically and shown two places
-until you change it: on the **SSH** tab itself, and on the Stream Deck's screen (if one's attached), on a
-dedicated key in the action row.
+tab. On first boot, a random per-device root password is generated automatically. It's deliberately
+**never shown on the web UI itself** (that page has no login of its own) — the only place it's ever
+revealed is the Stream Deck: **hold down the SSH key** (in the action row, next to GO) to display it for as
+long as you're holding it. Seeing it requires physically being at the device.
 
-1. Open the web UI (`http://dpx-buttonode-XXXX.local:8080`) → **SSH** tab, or check the deck screen, for the
-   generated password.
-2. Enter it in the **Enable SSH** form (or just use it to `ssh` in directly — SSH being off just means the
-   `ssh` service isn't running yet; enabling it from the UI starts it).
-3. **Set your own password** via the same tab — this deletes the generated one everywhere it was shown.
+1. On the Stream Deck, hold the **SSH** key to read the generated password.
+2. Enter it in the web UI's **Enable SSH** form (or use it to `ssh` in directly — SSH being off just means
+   the `ssh` service isn't running yet; enabling it from the UI starts it).
+3. **Set your own password** via the same tab — this deletes the generated one, and the SSH key goes blank.
+
+**No Stream Deck attached at first boot?** The generated password is not recoverable remotely by design —
+there is currently no other way to retrieve it. Connect a deck temporarily (it only needs to be attached
+long enough to hold the SSH key once) to get in, or reset the root password locally instead
+(`sudo passwd root` via a serial console / direct login, if your board supports one).
 
 ```bash
 ssh root@dpx-buttonode-XXXX.local

@@ -992,20 +992,23 @@ def render_mode(alert="", alert_cls="a-ok"):
 def render_ssh(alert="", alert_cls="a-ok"):
     enabled = ssh_enabled()
     badge = '<span class="badge badge-on">enabled</span>' if enabled else '<span class="badge badge-off">disabled</span>'
-    initial_pw = get_initial_ssh_password()
+    initial_pw_pending = get_initial_ssh_password() is not None
 
+    # Deliberately NOT shown here — this page has no login of its own, so
+    # printing the password on it would defeat the whole point of
+    # generating a per-device one. It's only ever revealed by physically
+    # holding the SSH key on the Stream Deck (see dpx-deck-splash.py) —
+    # this box just tells you where to look, never the value itself.
     initial_pw_box = f"""
 <div class="sec" style="border:2px solid #e3b341">
-  <h2>⚠ Your Current Root Password</h2>
+  <h2>⚠ Random Password Active</h2>
   <p class="note">
-    Generated randomly on first boot — also shown on the Stream Deck screen if one's attached.
-    Use this to enable SSH or set a real password below. It disappears from here (and the deck)
-    the moment you change it.
+    A random root password was generated on first boot — it's <strong>not shown here</strong>
+    (this page has no login of its own). Hold the <strong>SSH</strong> key on the Stream Deck's
+    screen to reveal it, use it below to enable SSH or set your own password. It's deleted
+    everywhere the moment you set a real one.
   </p>
-  <div style="font-size:22px;font-weight:700;font-family:monospace;color:#e3b341;
-              background:#161b22;border-radius:8px;padding:14px 18px;margin-top:10px;
-              letter-spacing:1px;display:inline-block">{esc(initial_pw)}</div>
-</div>""" if initial_pw else ""
+</div>""" if initial_pw_pending else ""
 
     toggle_form = (
         f'<form method="POST" action="/ssh" style="display:inline">'

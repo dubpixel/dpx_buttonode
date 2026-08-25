@@ -36,13 +36,16 @@ times). Now, if the deck has a third key row:
   if STATIC is staged, since re-pinning is idempotent and cheap). This
   exists specifically so a single mis-press of MODE or NET can't switch
   anything by itself — you set up the whole screen, then commit once.
-- SSH key (between SUBNET and GO, decks with >=5 columns only) — a pure
-  readout, no press action. Shows the random root password
-  dpx-init-ssh.sh generated at first boot, for as long as it's still
-  active (blank once the user sets a real password via the web UI's SSH
-  tab, which deletes the file this reads). SSH ships disabled with no
-  hardcoded default credential at all; this is how a per-device
-  first-boot password actually reaches someone standing at the unit.
+- SSH key (between SUBNET and GO, decks with >=5 columns only) —
+  hold-to-reveal, not always-on-display: shows a neutral "SSH" hint at
+  rest, and only shows the actual random root password dpx-init-ssh.sh
+  generated at first boot while a finger is physically holding the key
+  down, reverting the instant it's released. Deliberately NOT shown
+  anywhere on the web UI (that page has no login of its own) — this key
+  is the only place it's ever revealed, so seeing it requires actually
+  being at the device, not just LAN access. Blank once the user sets a
+  real password via the web UI's SSH tab, which deletes the file this
+  reads. SSH ships disabled with no hardcoded default credential at all.
 
 This script never touches systemctl, netplan, or /etc/dpx-mode directly —
 it shells out via `sudo` to dpx-buttonode-ui.py's `--apply-mode
@@ -338,16 +341,22 @@ def draw_go_key(deck, key):
 
 
 def draw_ssh_key(deck, key):
-    """Shows the first-boot random root password (see dpx-init-ssh.sh) —
-    or blank once it's been superseded by a real password (the file gets
-    deleted the moment dpx-buttonode-ui.py's change_root_password()
-    succeeds). Readable here because dpx-splash is already in the
-    `buttons` group for HID access, and the file's group is set to match
+    """Idle state for the SSH key — a neutral "SSH" hint, never the
+    password itself. The password (see dpx-init-ssh.sh) only appears
+    while this key is physically HELD DOWN, in make_key_callback's
+    on_key — reveal-on-hold, not always-on-display. That's deliberate:
+    the whole point is requiring someone to actually be at the device
+    with a finger on the key, not just able to glance at the screen or
+    reach the web UI over the LAN. Blank once the password's been
+    superseded by a real one (the file gets deleted the moment
+    dpx-buttonode-ui.py's change_root_password() succeeds — nothing left
+    to reveal). Readable here because dpx-splash is already in the
+    `buttons` group for HID access, and the file's group matches
     (root:buttons, 0640) — same permission model as everything else this
     process reads, no new privilege needed."""
     pw = get_initial_ssh_password()
     if pw:
-        deck.set_key_image(key, render_key(deck, pw, font_size=13, bg=SSH_PW_COLOR))
+        deck.set_key_image(key, render_key(deck, "SSH", font_size=15, bg=SSH_PW_COLOR))
     else:
         deck.set_key_image(key, blank_key(deck))
 
@@ -522,9 +531,23 @@ def make_key_callback(state):
 
     def on_key(deck, key, pressed):
         now = time.monotonic()
-        mode_key, net_key, subnet_key, _ssh_key, go_key = action_key_indices(deck)
-        # _ssh_key is a pure readout (the first-boot password) — no press action
+        mode_key, net_key, subnet_key, ssh_key, go_key = action_key_indices(deck)
         octet_keys = octet_key_indices(deck)
+
+        if ssh_key is not None and key == ssh_key:
+            # Hold-to-reveal, not always-on-display: the password only
+            # appears while a finger is physically on this key, and reverts
+            # to the neutral "SSH" hint the instant it's released. Requires
+            # actually being at the device, not just able to see the
+            # screen or reach the web UI over the LAN.
+            pw = get_initial_ssh_password()
+            if not pw:
+                return  # nothing left to reveal — password already changed
+            if pressed:
+                deck.set_key_image(key, render_key(deck, pw, font_size=13, bg=SSH_PW_COLOR))
+            else:
+                draw_ssh_key(deck, key)
+            return
 
         if octet_keys and key in octet_keys:
             idx = octet_keys.index(key)
