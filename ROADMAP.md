@@ -54,6 +54,13 @@ From any buttonode's web UI, show all other buttonodes visible on the local netw
 
 ## General
 
+- [ ] **Security: SSH exposure.** Every image ships with SSH enabled and the hardcoded root password `1234`,
+  unrotated per build, no SSH key option. Confirmed on hardware that Armbian's "forces password change on
+  first login" only fires for an interactive terminal — scripted SSH access never triggers it, so the
+  default stays valid indefinitely. Needs: (1) a web UI SSH tab — enable/disable SSH, change the root
+  password from the browser; (2) a Packer/CI-time option to disable SSH by default or generate+surface a
+  random per-build password on images built for public release, instead of shipping `1234` unconditionally.
+  See README's security warning and AGENTS.md gotcha #10a.
 - [ ] First-boot wizard (hostname confirmation, mode selection: Buttons vs Satellite)
 - [ ] `/status` JSON endpoint for scripting/monitoring
 - [ ] Make `full` variant opt-in on automated releases — add `build-full` boolean input to `release-action.yaml` so the full image is only built when explicitly requested, not on every Buttons version bump (currently doubles CI time)

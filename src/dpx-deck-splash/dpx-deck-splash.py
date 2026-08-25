@@ -6,40 +6,49 @@ the device.
 
 Installed: /usr/local/bin/dpx-deck-splash.py
 Service:   dpx-deck-splash.service (After=dpx-set-hostname.service,
-           Before=/Conflicts=bitfocus-buttons-usb-relay.service — see the
-           unit file for the full hand-off story)
+           Before=/Conflicts=bitfocus-buttons-usb-relay.service,
+           satellite.service, companion.service — see the unit file for
+           the full hand-off story)
 
-Phase 2/3: if the deck has a third key row, the first two keys in it are
-action buttons:
+Phase 2/3, redesigned as a stage-then-execute config screen (v2 — the
+first cut had MODE/NET independently long-press-committing, which was
+confusing and let a network change and a mode change land at different
+times). Now, if the deck has a third key row:
 
-- MODE — a select-then-commit readout, not an instant switch. Short press
-  advances a candidate (Buttons -> Satellite -> Companion, skipping
-  Companion if not installed) shown as a colored label on the key
-  (BTN/SAT/CMP) without touching anything yet; long press (held >=
-  LONG_PRESS_SECONDS) commits — actually switches to whatever's currently
-  shown. This exists because an instant single-tap switch is one
-  mis-press away from killing this very service (see Conflicts= below)
-  with no undo.
-- NET — short press: immediate toggle, DHCP <-> static (going to static
-  freezes whatever IP is currently DHCP-assigned). Long press: commits
-  whatever's currently being edited via the octet keys below as a
-  specific static IP, if anything's been edited — otherwise behaves the
-  same as a short press.
-- The 4 IP octet keys (row 0, when the deck has >=4 columns) double as
-  editable fields: hold one down to spin its value 0-255 (auto-advances
-  every OCTET_STEP_SECONDS while held, shown live in a distinct color),
-  release to lock that octet in. Untouched octets keep showing the live
-  DHCP value until NET is long-pressed to commit the combined result as a
-  static IP (via --pin-static). No on-deck keyboard, so this is the only
-  way to set a specific address from the device itself.
+- MODE key — short press only, cycles a pending mode candidate (Buttons
+  -> Satellite -> Companion, skipping Companion if not installed), shown
+  as a colored label (BTN/SAT/CMP). Never commits anything by itself.
+- NET key — short press only, toggles a pending DHCP/STATIC choice, shown
+  as its actual label ("DHCP" or "STATIC"), not a generic "NET" text.
+  Never commits anything by itself.
+- SUBNET key — short press only, cycles a pending prefix length through
+  SUBNET_OPTIONS (e.g. /24, /22, /16, /8). Only meaningful when STATIC is
+  staged, but harmless to change regardless.
+- The 4 IP octet keys (row 0) are editable ONLY while STATIC is staged —
+  hold one to spin its value 0-255, release to lock it in. Locked/dimmed
+  (ignored presses) while DHCP is staged, since there's nothing to build
+  a static address out of in that case.
+- GO key (bottom-right of the action row) — the ONLY key that actually
+  applies anything. One press commits whatever's currently staged: a
+  mode switch if the candidate differs from the active mode, and a
+  network change if DHCP/STATIC differs from the current live state (or
+  unconditionally re-pins STATIC with the currently staged octets/prefix
+  if STATIC is staged, since re-pinning is idempotent and cheap). This
+  exists specifically so a single mis-press of MODE or NET can't switch
+  anything by itself — you set up the whole screen, then commit once.
 
 This script never touches systemctl, netplan, or /etc/dpx-mode directly —
 it shells out via `sudo` to dpx-buttonode-ui.py's `--apply-mode
-<value>`/`--toggle-net`/`--pin-static <ip>` CLI subcommands (see
+<value>`/`--toggle-net`/`--pin-static <ip>[/prefix]` CLI subcommands (see
 /etc/sudoers.d/dpx-splash, installed by install-deck-splash.sh), which is
 where that logic actually lives. Keeps this process's own privilege
 footprint at exactly `buttons` group membership — nothing more — even
-though it can now trigger real system changes.
+though GO can trigger real system changes. Reads of live network state
+(get_current_net_mode, get_primary_iface, get_current_prefix) are plain
+unprivileged `ip` command output, duplicated from dpx-buttonode-ui.py's
+own equivalents rather than imported — this is a separate process/venv
+with no clean way to import a hyphenated-filename module, and these are
+one-line-of-logic reads, not real business logic worth sharing.
 
 Unlike dpx-buttonode-ui.py, this script is NOT stdlib-only on purpose —
 drawing to the deck needs real HID + image handling, which is a different
@@ -71,14 +80,14 @@ from PIL import Image, ImageDraw, ImageFont
 PORT = 8080                  # dpx-buttonode-ui's port — shown alongside the IP
 REFRESH_SECONDS = 5          # how often to re-check IP/hostname while idle
 RETRY_SECONDS = 3            # how often to retry finding a deck if none present
-LONG_PRESS_SECONDS = 1.0     # MODE/NET: held this long or more = commit, else = select/toggle
-REARM_SECONDS = 0.25         # MODE/NET: ignore a new press this soon after the last release
+REARM_SECONDS = 0.25         # ignore a new press this soon after the last one (contact bounce)
 OCTET_STEP_SECONDS = 0.15    # how fast a held octet key spins its value
 UI_SCRIPT = "/usr/local/bin/dpx-buttonode-ui.py"
 MODE_FILE = Path("/etc/dpx-mode")
 COMPANION_DIR = Path("/opt/companion")
 MODE_ORDER = ["buttons", "satellite", "companion"]
 MODE_LABELS = {"buttons": "BTN", "satellite": "SAT", "companion": "CMP"}
+SUBNET_OPTIONS = [24, 22, 16, 8]
 FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
@@ -93,10 +102,41 @@ def run(cmd):
         return ""
 
 
+def get_primary_iface():
+    """First real Ethernet interface name from sysfs. Mirrors
+    dpx-buttonode-ui.py's get_primary_iface() — plain unprivileged read."""
+    for p in sorted(Path("/sys/class/net").iterdir()):
+        t_f = p / "type"
+        a_f = p / "address"
+        if not t_f.exists() or not a_f.exists():
+            continue
+        if t_f.read_text().strip() != "1":
+            continue
+        addr = a_f.read_text().strip()
+        if re.match(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$", addr) and addr != "00:00:00:00:00:00":
+            return p.name
+    return "eth0"
+
+
 def get_ip():
     out = run(["ip", "-4", "addr", "show", "scope", "global"])
     m = re.search(r"inet\s+(\d+\.\d+\.\d+\.\d+)/", out)
     return m.group(1) if m else None
+
+
+def get_current_net_mode():
+    """"dhcp" or "static", read live off the primary interface — mirrors
+    the "dynamic" flag check dpx-buttonode-ui.py's get_net_info() does."""
+    iface = get_primary_iface()
+    out = run(["ip", "-4", "addr", "show", "dev", iface])
+    return "dhcp" if "dynamic" in out else "static"
+
+
+def get_current_prefix():
+    iface = get_primary_iface()
+    out = run(["ip", "-4", "addr", "show", "dev", iface, "scope", "global"])
+    m = re.search(r"inet\s+\d+\.\d+\.\d+\.\d+/(\d+)", out)
+    return int(m.group(1)) if m else 24
 
 
 def get_mdns_name():
@@ -107,10 +147,7 @@ def get_mdns_name():
 
 def companion_installed():
     """True on Full-variant images. Same check dpx-buttonode-ui.py's own
-    companion_installed() makes (COMPANION_DIR.exists()) — duplicated
-    here rather than imported since this is a separate process/venv with
-    no clean way to import a hyphenated-filename module, and it's a
-    single one-line filesystem check, not real business logic."""
+    companion_installed() makes (COMPANION_DIR.exists())."""
     return COMPANION_DIR.exists()
 
 
@@ -146,25 +183,28 @@ MODE_COLORS = {
     "satellite": (30, 150, 60),    # green
     "companion": (150, 40, 190),   # purple
 }
-NET_COLOR = (200, 110, 20)     # orange — visually distinct from any MODE color
+NET_MODE_COLORS = {
+    "dhcp": (40, 130, 200),        # blue
+    "static": (200, 110, 20),      # orange
+}
+SUBNET_COLOR = (90, 90, 90)    # neutral gray — a setting, not a mode
+GO_COLOR = (20, 175, 60)       # bright green — the one key that actually does something
 FLASH_COLOR = (255, 200, 0)    # amber flash — instant "press registered" feedback
 EDIT_COLOR = (0, 170, 190)     # cyan — an octet currently being edited, not yet committed
+DISABLED_FG = (110, 110, 110)  # dimmed text for octets locked while DHCP is staged
 
 
-def render_key(deck, text, font_size=16, bg=(0, 0, 0)):
+def render_key(deck, text, font_size=16, bg=(0, 0, 0), fg="white"):
     """One key, centered text, solid background — deliberately simple,
     hardcoded for exactly the fields we need (IP octet, hostname segment,
     action-button label). Not a general text-wrap engine.
 
-    `bg` distinguishes the MODE/NET action keys (colored) from the plain
-    info keys (black) — confirmed on hardware that leaving everything
-    black made the action buttons impossible to tell apart from the
-    IP/hostname display at a glance.
+    `bg` distinguishes the action keys (colored) from the plain info keys
+    (black). `fg` dims octet text when editing is locked (DHCP staged).
 
     Shrinks the font until the text fits the key width (with a small
-    margin) rather than letting a longer word (e.g. "buttonode") run off
-    the edge — segments are whole words now (see chunk_hostname), so
-    lengths vary more than the old fixed-character-count chunking did.
+    margin) rather than letting a longer word (e.g. "STATIC") run off
+    the edge.
     """
     image = PILHelper.create_key_image(deck)
     draw = ImageDraw.Draw(image)
@@ -182,7 +222,7 @@ def render_key(deck, text, font_size=16, bg=(0, 0, 0)):
     h = bbox[3] - bbox[1]
     w = bbox[2] - bbox[0]
     pos = ((image.width - w) / 2, (image.height - h) / 2)
-    draw.text(pos, text, font=font, fill="white")
+    draw.text(pos, text, font=font, fill=fg)
     return PILHelper.to_native_key_format(deck, image)
 
 
@@ -192,47 +232,47 @@ def blank_key(deck):
 
 
 def octet_key_indices(deck):
-    """Key indices for the 4 editable IP-octet keys in row 0, or [] if the
-    deck has fewer than 4 columns — there's no clean 1-key-per-octet
-    mapping on a deck that small, so editing simply isn't offered there
-    (same graceful-degradation approach as action_key_indices)."""
+    """Key indices for the 4 IP-octet keys in row 0, or [] if the deck
+    has fewer than 4 columns — there's no clean 1-key-per-octet mapping
+    on a deck that small, so editing simply isn't offered there (same
+    graceful-degradation approach as action_key_indices)."""
     rows, cols = deck.key_layout()
     if cols < 4:
         return []
     return [0, 1, 2, 3]
 
 
-def draw_octet_key(deck, key, idx, live_octets, ip_edit):
-    """Render one octet key: an in-progress edited value (cyan, from
-    ip_edit) takes priority over the live DHCP-assigned value. idx is the
-    octet's position (0-3), not the deck key index."""
-    val = ip_edit.get(idx)
+def draw_octet_key(deck, key, idx, live_octets, ip_edit, editable):
+    """Render one octet key. idx is the octet's position (0-3), not the
+    deck key index. Editing is only meaningful while STATIC is staged
+    (`editable`) — when it's not, any in-progress edit is ignored and the
+    live value is shown dimmed, signaling "you can't touch this right now"
+    rather than silently doing nothing."""
+    val = ip_edit.get(idx) if editable else None
     if val is not None:
         deck.set_key_image(key, render_key(deck, str(val), bg=EDIT_COLOR))
         return
     if idx < len(live_octets):
-        deck.set_key_image(key, render_key(deck, live_octets[idx]))
+        text = live_octets[idx]
     elif idx == 0:
-        deck.set_key_image(key, render_key(deck, "no"))
+        text = "no"
     elif idx == 1:
-        deck.set_key_image(key, render_key(deck, "IP"))
+        text = "IP"
     else:
+        text = ""
+    if not text:
         deck.set_key_image(key, blank_key(deck))
+        return
+    fg = "white" if editable else DISABLED_FG
+    deck.set_key_image(key, render_key(deck, text, fg=fg))
 
 
 def chunk_hostname(name, n):
     """Split 'dpx-buttonode-XXXX.local' across n keys on natural word
-    boundaries (-, .), one whole word per key — not a fixed character
-    count. Each segment (after the first) keeps its leading separator
-    ("-buttonode", ".local") so the keys visually read as one connected
-    string rather than unrelated words — confirmed on hardware that
-    dropping the separator entirely reads as confusing, not just plain.
-    render_key() shrinks the font to fit whatever lands on a key, so a
-    longer segment like "-buttonode" still renders whole instead of
-    getting chopped mid-word (old bug: fixed 6-char slices produced
-    "dpx-bu"/"ttonod"/"e-2199"). If there are more segments than keys,
-    the overflow gets folded into the last key rather than silently
-    dropped.
+    boundaries (-, .), one whole word per key, each keeping its leading
+    separator ("-buttonode", ".local") so the keys visually read as one
+    connected string. render_key() shrinks the font to fit whatever lands
+    on a key. Overflow (more segments than keys) folds into the last key.
     """
     segments = re.findall(r"[-.]?[^-.]+", name)
     if len(segments) > n:
@@ -241,42 +281,59 @@ def chunk_hostname(name, n):
 
 
 def action_key_indices(deck):
-    """Key indices for the MODE and NET action buttons, or (None, None) if
-    the deck doesn't have a third row to put them in (e.g. a 2-row Mini) —
-    Phase 2/3 is simply unavailable on decks that small, not an error."""
+    """Key indices for the four action-row keys, or all-None if the deck
+    doesn't have a third row (e.g. a 2-row Mini) — Phase 2/3 is simply
+    unavailable on decks that small, not an error. GO is always the
+    LAST key in the row (bottom-right), regardless of column count."""
     rows, cols = deck.key_layout()
     if rows < 3:
-        return None, None
-    return 2 * cols, 2 * cols + 1
+        return None, None, None, None
+    base = 2 * cols
+    return base, base + 1, base + 2, base + (cols - 1)
 
 
-def draw_mode_key(deck, key, mode_candidate):
-    """Redraw just the MODE key showing the current (not-yet-committed)
-    candidate — its own function since this needs to be called both from
-    the full draw_splash() and standalone whenever the candidate changes
-    on a short press, without redrawing the whole deck."""
+def draw_mode_key(deck, key, mode_pending):
     deck.set_key_image(key, render_key(
-        deck, MODE_LABELS[mode_candidate], font_size=14, bg=MODE_COLORS[mode_candidate]
+        deck, MODE_LABELS[mode_pending], font_size=14, bg=MODE_COLORS[mode_pending]
     ))
 
 
+def draw_net_key(deck, key, net_pending):
+    deck.set_key_image(key, render_key(
+        deck, net_pending.upper(), font_size=13, bg=NET_MODE_COLORS[net_pending]
+    ))
+
+
+def draw_subnet_key(deck, key, prefix_pending):
+    deck.set_key_image(key, render_key(deck, f"/{prefix_pending}", font_size=15, bg=SUBNET_COLOR))
+
+
+def draw_go_key(deck, key):
+    deck.set_key_image(key, render_key(deck, "GO", font_size=18, bg=GO_COLOR))
+
+
 def draw_splash(deck, ip, mdns_name, state):
-    """state = {"mode_candidate": <mode>, "ip_edit": {octet_idx: value}}"""
+    """state = {"mode_pending", "net_pending", "prefix_pending", "ip_edit", "busy"}"""
     rows, cols = deck.key_layout()
     total = deck.key_count()
-    mode_key, net_key = action_key_indices(deck)
+    mode_key, net_key, subnet_key, go_key = action_key_indices(deck)
     octet_keys = octet_key_indices(deck)
     live_octets = ip.split(".") if ip else []
     host_row = chunk_hostname(mdns_name, cols) if rows >= 2 else []
+    editable = state["net_pending"] == "static"
 
     for i in range(total):
         r, c = divmod(i, cols)
         if i == mode_key:
-            draw_mode_key(deck, i, state["mode_candidate"])
+            draw_mode_key(deck, i, state["mode_pending"])
         elif i == net_key:
-            deck.set_key_image(i, render_key(deck, "NET", font_size=14, bg=NET_COLOR))
+            draw_net_key(deck, i, state["net_pending"])
+        elif i == subnet_key:
+            draw_subnet_key(deck, i, state["prefix_pending"])
+        elif i == go_key:
+            draw_go_key(deck, i)
         elif r == 0 and octet_keys and c < 4:
-            draw_octet_key(deck, i, c, live_octets, state["ip_edit"])
+            draw_octet_key(deck, i, c, live_octets, state["ip_edit"], editable)
         elif r == 0 and octet_keys and c == 4:
             deck.set_key_image(i, render_key(deck, f":{PORT}") if live_octets else blank_key(deck))
         elif r == 1 and c < len(host_row) and host_row[c]:
@@ -285,15 +342,20 @@ def draw_splash(deck, ip, mdns_name, state):
             deck.set_key_image(i, blank_key(deck))
 
 
+def redraw_octets(deck, octet_keys, state):
+    live_octets = (get_ip() or "").split(".")
+    editable = state["net_pending"] == "static"
+    for i, key in enumerate(octet_keys):
+        draw_octet_key(deck, key, i, live_octets, state["ip_edit"], editable)
+
+
 def run_privileged(args):
     """Shell out via sudo to the exact CLI subcommand on dpx-buttonode-ui.py
     that /etc/sudoers.d/dpx-splash whitelists. `args` is a list, e.g.
-    ["--apply-mode", "satellite"] or ["--toggle-net"]. This process never
-    runs the mode-switch/network-toggle logic itself or gains any
-    privilege beyond `buttons` group membership — sudo is the only door,
-    and every command it can open onto is enumerated exactly in the
-    sudoers file, nothing wildcarded on the mode/toggle commands. Returns
-    (ok, msg).
+    ["--apply-mode", "satellite"] or ["--pin-static", "10.0.0.5/24"]. This
+    process never runs the mode-switch/network logic itself or gains any
+    privilege beyond `buttons` group membership — sudo is the only door.
+    Returns (ok, msg).
     """
     try:
         r = subprocess.run(
@@ -310,34 +372,43 @@ def run_privileged(args):
         return False, str(e)
 
 
-def do_action(deck, key, args, redraw_on_failure, state):
-    """Run a privileged action and reconcile the key's on-screen state
-    with what actually happened. If it succeeds, the process usually gets
-    killed within a second or two anyway (the new mode/net service
-    restart triggers Conflicts=) — the flash drawn on press just stays
-    frozen as the last image, which is fine, it reads as confirmation. If
-    it FAILS (e.g. no gateway detected for NET), nothing about the
-    running state changes and this process survives — leaving the flash
-    up in that case would be a false positive, so `redraw_on_failure()`
-    (a zero-arg callable) restores the key's normal look. Guarded in
-    try/except since the deck handle can legitimately disappear mid-call
-    if the action DID succeed and killed us before this line runs.
+def execute_staged(deck, key, state):
+    """The GO action: apply whatever's currently staged, as one combined
+    operation. Runs the mode switch and the network change sequentially
+    (not concurrently) — each is independently atomic on the server side,
+    but either one can trigger Conflicts= and kill this process mid-way
+    through the sequence. That's fine: whichever completes leaves the
+    system in a valid, self-consistent state, it just means a single GO
+    press might only get through the first of two staged changes if both
+    were pending — pressing GO again afterward (once the splash service
+    is back, if it survived) finishes the rest.
 
-    Always clears state["busy"] when done (confirmed on hardware this
-    matters: a mode/net action can take several seconds — poll loops,
-    service restarts — and without a busy guard a second press landing
-    mid-action fires a second concurrent privileged call that races the
-    first one instead of being ignored).
+    Always clears state["busy"] and tries to redraw GO back to normal —
+    guarded, since the process may already be dead by the time this runs.
     """
     try:
-        ok, _ = run_privileged(args)
-        if not ok:
-            try:
-                redraw_on_failure()
-            except Exception:
-                pass
+        current_mode = get_current_mode()
+        if state["mode_pending"] != current_mode:
+            run_privileged(["--apply-mode", state["mode_pending"]])
+
+        if state["net_pending"] == "static":
+            live = (get_ip() or "0.0.0.0").split(".")
+            octets = [
+                str(state["ip_edit"].get(i, int(live[i]) if i < len(live) else 0))
+                for i in range(4)
+            ]
+            cidr = f"{'.'.join(octets)}/{state['prefix_pending']}"
+            run_privileged(["--pin-static", cidr])
+        elif get_current_net_mode() != "dhcp":
+            run_privileged(["--toggle-net"])
+
+        state["ip_edit"].clear()
     finally:
         state["busy"] = False
+        try:
+            draw_go_key(deck, key)
+        except Exception:
+            pass
 
 
 def start_octet_edit(deck, key, idx, state, stop_events):
@@ -345,7 +416,8 @@ def start_octet_edit(deck, key, idx, state, stop_events):
     its own thread, stepping every OCTET_STEP_SECONDS until `stop_events
     [key]` is set (on release). Starts from the live DHCP-assigned value
     the first time this octet is touched, then continues from wherever it
-    was left if the same octet is held again later."""
+    was left if the same octet is held again later. Only called at all
+    while STATIC is staged — see make_key_callback."""
     ev = threading.Event()
     stop_events[key] = ev
     if idx not in state["ip_edit"]:
@@ -367,59 +439,54 @@ def start_octet_edit(deck, key, idx, state, stop_events):
 
 def make_key_callback(state):
     """Returns a callback for deck.set_key_callback(). `state` is a small
-    mutable dict shared with the caller so selections/edits survive
-    across callback invocations and periodic IP/hostname redraws:
-    {"mode_candidate": <one of MODE_ORDER>, "ip_edit": {octet_idx: value}}
+    mutable dict shared with the caller — see draw_splash's docstring for
+    its shape — so selections/edits survive across callback invocations
+    and periodic IP/hostname redraws.
 
-    Three groups of keys, three interaction patterns:
+    Everything except GO and the octet keys is now a pure short-press
+    toggle/cycle with zero side effects on the running system — MODE and
+    NET only ever change state["mode_pending"]/state["net_pending"] and
+    redraw. This is a deliberate v2 redesign: the first cut had MODE and
+    NET each independently long-press-committing, which meant a network
+    change and a mode change could land at different times with no way
+    to review both before either took effect. Now nothing actually
+    happens to the system until GO is pressed.
 
-    OCTET keys (row 0, cols 0-3, if the deck is wide enough) — hold to
-    spin that octet's value 0-255 (start_octet_edit, above), release to
-    lock it in at whatever it landed on. Nothing is applied to the system
-    yet — this only edits state["ip_edit"].
+    Octet keys: hold to spin 0-255, release to lock in — but ONLY while
+    STATIC is staged (state["net_pending"] == "static"); presses are
+    silently ignored otherwise, since there's nothing to build a static
+    address out of when DHCP is staged.
 
-    MODE — select-then-commit, distinguished by press duration:
-    - press: record the timestamp.
-    - release held < LONG_PRESS_SECONDS: short press, advance the
-      candidate to the next mode and redraw just that key. Nothing
-      applied yet.
-    - release held >= LONG_PRESS_SECONDS: long press, commit — apply via
-      --apply-mode <candidate> in a background thread.
-
-    NET — press duration decides short-toggle vs. commit-edited-IP:
-    - release held < LONG_PRESS_SECONDS: short press, plain DHCP<->static
-      toggle (--toggle-net), same as Phase 2's first cut.
-    - release held >= LONG_PRESS_SECONDS AND at least one octet has been
-      edited: commit the edited IP as a specific static address
-      (--pin-static <ip>), combining edited octets with the live value
-      for any untouched ones. With nothing edited, a long press just
-      behaves like a short one — there's nothing else it could mean.
+    GO: single press, immediate (fires on press, not release) — applies
+    everything currently staged via execute_staged(), in a background
+    thread so the HID callback isn't blocked for the several seconds a
+    mode/network change can take.
 
     REARM_SECONDS guards against a too-fast repeat press being misread as
-    a new gesture (hardware contact bounce), not against intentional
-    rapid interaction — kept short so cycling MODE or spinning an octet
-    doesn't feel sluggish.
+    a second gesture (hardware contact bounce), not against intentional
+    rapid interaction.
 
-    IMPORTANT, confirmed on hardware: when a commit/toggle SUCCEEDS,
-    systemd kills this entire process (main PID) within a second or two
-    — the new mode/net service starting triggers Conflicts=. There is no
-    window afterward to draw a "done" screen; the Stream Deck's display
-    isn't live video, it just holds whatever was last written. That's why
-    every commit flash includes a checkmark rather than just a color swap
-    — frozen "✓" reads as confirmation, a frozen bare block reads as
-    broken.
+    IMPORTANT, confirmed on hardware: when GO's action actually changes
+    something, systemd kills this entire process (main PID) within a
+    second or two — the new mode/net service starting triggers
+    Conflicts=. There is no window afterward to draw a "done" screen; the
+    Stream Deck's display isn't live video, it just holds whatever was
+    last written. That's why the flash includes a checkmark rather than
+    just a color swap — frozen "✓" reads as confirmation, a frozen bare
+    block reads as broken.
     """
-    press_started = {}
-    last_release = {}
+    last_press = {}
     stop_events = {}
 
     def on_key(deck, key, pressed):
         now = time.monotonic()
-        mode_key, net_key = action_key_indices(deck)
+        mode_key, net_key, subnet_key, go_key = action_key_indices(deck)
         octet_keys = octet_key_indices(deck)
 
         if octet_keys and key in octet_keys:
             idx = octet_keys.index(key)
+            if state["net_pending"] != "static":
+                return  # editing locked unless STATIC is staged
             if pressed:
                 start_octet_edit(deck, key, idx, state, stop_events)
             else:
@@ -428,78 +495,32 @@ def make_key_callback(state):
                     ev.set()
             return
 
-        if key == mode_key:
-            if pressed:
-                if now - last_release.get(key, 0) < REARM_SECONDS:
-                    return
-                press_started[key] = now
-                return
-            # release
-            start = press_started.pop(key, None)
-            last_release[key] = now
-            if start is None:
-                return
-            held = now - start
-            if held >= LONG_PRESS_SECONDS:
-                if state.get("busy"):
-                    return  # a previous commit/toggle is still in flight — ignore
-                state["busy"] = True
-                candidate = state["mode_candidate"]
-                deck.set_key_image(key, render_key(
-                    deck, f"{MODE_LABELS[candidate]} ✓", font_size=12, bg=FLASH_COLOR
-                ))
-                threading.Thread(
-                    target=do_action,
-                    args=(deck, key, ["--apply-mode", candidate],
-                          lambda: draw_mode_key(deck, key, state["mode_candidate"]), state),
-                    daemon=True,
-                ).start()
-            else:
-                state["mode_candidate"] = next_mode(state["mode_candidate"])
-                draw_mode_key(deck, key, state["mode_candidate"])
+        if not pressed:
+            return  # MODE/NET/SUBNET/GO all act on press, nothing on release
+        if now - last_press.get(key, 0) < REARM_SECONDS:
             return
+        last_press[key] = now
 
-        if key == net_key:
-            if pressed:
-                if now - last_release.get(key, 0) < REARM_SECONDS:
-                    return
-                press_started[key] = now
-                return
-            # release
-            start = press_started.pop(key, None)
-            last_release[key] = now
-            if start is None:
-                return
+        if key == mode_key:
+            state["mode_pending"] = next_mode(state["mode_pending"])
+            draw_mode_key(deck, key, state["mode_pending"])
+
+        elif key == net_key:
+            state["net_pending"] = "dhcp" if state["net_pending"] == "static" else "static"
+            draw_net_key(deck, key, state["net_pending"])
+            redraw_octets(deck, octet_keys, state)  # lock/unlock, dim/undim
+
+        elif key == subnet_key:
+            i = SUBNET_OPTIONS.index(state["prefix_pending"]) if state["prefix_pending"] in SUBNET_OPTIONS else 0
+            state["prefix_pending"] = SUBNET_OPTIONS[(i + 1) % len(SUBNET_OPTIONS)]
+            draw_subnet_key(deck, key, state["prefix_pending"])
+
+        elif key == go_key:
             if state.get("busy"):
-                return  # a previous commit/toggle is still in flight — ignore
-            held = now - start
-            revert = lambda: deck.set_key_image(key, render_key(deck, "NET", font_size=14, bg=NET_COLOR))
-            if held >= LONG_PRESS_SECONDS and state["ip_edit"]:
-                state["busy"] = True
-                live = (get_ip() or "0.0.0.0").split(".")
-                final = [
-                    str(state["ip_edit"].get(i, int(live[i]) if i < len(live) else 0))
-                    for i in range(4)
-                ]
-                ip_str = ".".join(final)
-                state["ip_edit"].clear()
-                deck.set_key_image(key, render_key(deck, "NET ✓", font_size=12, bg=FLASH_COLOR))
-                threading.Thread(
-                    target=do_action, args=(deck, key, ["--pin-static", ip_str], revert, state), daemon=True
-                ).start()
-            else:
-                # write_networkd_config() also restarts whichever mode
-                # service /etc/dpx-mode currently names, which can trigger
-                # the same Conflicts=-kills-us-mid-flight situation as
-                # MODE above — but NET frequently no-ops (e.g. no gateway
-                # detected) and leaves this process alive, so do_action()
-                # reverts the key on failure instead of leaving a
-                # false-positive checkmark.
-                state["busy"] = True
-                deck.set_key_image(key, render_key(deck, "NET ✓", font_size=12, bg=FLASH_COLOR))
-                threading.Thread(
-                    target=do_action, args=(deck, key, ["--toggle-net"], revert, state), daemon=True
-                ).start()
+                return  # a previous GO is still in flight — ignore
+            state["busy"] = True
+            deck.set_key_image(key, render_key(deck, "GO ✓", font_size=15, bg=FLASH_COLOR))
+            threading.Thread(target=execute_staged, args=(deck, key, state), daemon=True).start()
 
     return on_key
 
@@ -516,12 +537,18 @@ def run_splash_loop():
             deck.open()
             deck.reset()
             deck.set_brightness(60)
-            # Candidate starts at whatever mode is actually active — a
-            # fresh dpx-deck-splash session (new open) has no memory of
-            # any in-progress selection from before, so defaulting to
-            # "current" rather than always "buttons" avoids the readout
-            # looking wrong the instant it starts up.
-            state = {"mode_candidate": get_current_mode(), "ip_edit": {}, "busy": False}
+            # Everything pending starts at whatever's actually live — a
+            # fresh session has no memory of any prior in-progress
+            # selection, so defaulting to "current" avoids the readout
+            # looking wrong (or, worse, staging a change nobody asked
+            # for) the instant this starts up.
+            state = {
+                "mode_pending": get_current_mode(),
+                "net_pending": get_current_net_mode(),
+                "prefix_pending": get_current_prefix(),
+                "ip_edit": {},
+                "busy": False,
+            }
             deck.set_key_callback(make_key_callback(state))
             print(f"dpx-deck-splash: opened {deck.deck_type()} ({deck.key_count()} keys)")
             while True:

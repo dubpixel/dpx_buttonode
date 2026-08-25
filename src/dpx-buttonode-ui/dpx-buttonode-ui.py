@@ -281,24 +281,32 @@ def toggle_net():
     return True, "Switched to DHCP"
 
 
-def pin_static(ip_str):
+def pin_static(cidr_str):
     """Apply a specific, fully user-chosen static IP address (all four
-    octets), keeping the CURRENTLY DETECTED gateway/DNS and subnet
-    prefix length unchanged — the deck's per-octet edit-and-commit flow
-    (hold an octet key to advance its value, long-press NET to commit)
-    calls this with the IP it built up. Unlike --apply-mode's three
-    enumerated sudoers values, sudoers can only glob-match this
-    argument loosely (see install-deck-splash.sh) — this function,
-    using the same validate_ip() the web UI's own network form uses, is
-    the real gate. Returns (ok, msg).
+    octets, plus an optional /prefix), keeping the CURRENTLY DETECTED
+    gateway/DNS unchanged — the deck's stage-then-GO flow (hold an octet
+    key to spin its value, cycle the SUBNET key for a prefix, press GO to
+    commit) calls this with the address it built up. `cidr_str` is
+    "ip" or "ip/prefix"; if no prefix is given, falls back to whatever
+    prefix is currently live. Unlike --apply-mode's three enumerated
+    sudoers values, sudoers can only glob-match this argument loosely
+    (see install-deck-splash.sh) — this function, using the same
+    validate_ip() the web UI's own network form uses plus a prefix range
+    check, is the real gate. Returns (ok, msg).
     """
+    ip_str, _, prefix_str = cidr_str.partition("/")
     if not validate_ip(ip_str):
         return False, "Invalid IP address"
     iface = get_primary_iface()
     current = get_net_info()
     if not current.get("gateway"):
         return False, "No gateway detected — can't safely pin a static config"
-    prefix = current["ip_cidr"].split("/")[-1] if "/" in current["ip_cidr"] else "24"
+    if prefix_str:
+        if not (prefix_str.isdigit() and 0 <= int(prefix_str) <= 32):
+            return False, "Invalid subnet prefix"
+        prefix = prefix_str
+    else:
+        prefix = current["ip_cidr"].split("/")[-1] if "/" in current["ip_cidr"] else "24"
     ip_cidr = f"{ip_str}/{prefix}"
     write_networkd_config(iface, "static", ip_cidr, current["gateway"], current["dns"])
     return True, f"Pinned static {ip_cidr}"

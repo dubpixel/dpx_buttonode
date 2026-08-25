@@ -348,10 +348,24 @@ SSH is **enabled by default**. As soon as the board is on the network:
 ```bash
 ssh root@dpx-buttonode-XXXX.local
 # where XXXX is the last 4 hex chars of the board's MAC address
-# Default password: 1234 (Armbian forces a change on first login)
+# Default password: 1234
 ```
 
 If mDNS isn't resolving, find the IP from your router and use that directly.
+
+> ⚠️ **Security warning — read before deploying anywhere untrusted.**
+> Every image ships with SSH enabled and the same hardcoded root password
+> (`1234`, Armbian's own default) — this is **not** rotated or randomized
+> per build. Armbian's "forces a password change on first login" only
+> applies to an actual interactive terminal session; it does **not**
+> trigger for scripted/automated SSH access (e.g. `ssh root@host cmd`),
+> so `root/1234` stays valid indefinitely unless you change it yourself.
+> There is currently no SSH key option, no way to disable SSH from the
+> web UI, and no CI-time flag to strip SSH or randomize the password on
+> images built for public release. **Change the root password yourself
+> immediately after first boot** (`passwd`) if the device will ever sit
+> on a network you don't fully trust. Tracked for a real fix — see the
+> Roadmap.
 
 ---
 
