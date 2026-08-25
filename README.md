@@ -39,13 +39,13 @@
     <img src="images/logo.png" alt="Logo" height="120">
   </a>
 <h1 align="center">dpx-buttonode</h1>
-<h3 align="center"><i>Flash-ready Armbian images for Bitfocus Companion — Buttons USB Relay, Companion Satellite, and full Bitfocus Companion, switchable at runtime</i></h3>
+<h3 align="center"><i>Flash-ready Armbian images for <a href="https://bitfocus.io/companion">Bitfocus Companion</a> — turn any ARM SBC into a <a href="https://github.com/bitfocus/companion-satellite">Companion Satellite</a> node (or run full Companion itself), switchable at runtime</i></h3>
   <p align="center">
     Automated GitHub Actions build pipeline that produces ready-to-flash <code>.img.gz</code> images
-    for ARM single-board computers (Rock Pi S, Orange Pi Zero, etc.) with
-    <a href="https://bitfocus.io/buttons">Bitfocus Buttons USB Relay</a>,
-    <a href="https://github.com/bitfocus/companion-satellite">Bitfocus Companion Satellite</a>, and
-    (Full image variant) full <a href="https://bitfocus.io/companion">Bitfocus Companion</a> itself pre-installed.
+    for ARM single-board computers (Rock Pi S, Orange Pi Zero, etc.) that boot straight into
+    <a href="https://github.com/bitfocus/companion-satellite">Bitfocus Companion Satellite</a> —
+    or, on the Full image variant, run full <a href="https://bitfocus.io/companion">Bitfocus Companion</a> itself.
+    <a href="https://bitfocus.io/buttons">Bitfocus Buttons USB Relay</a> is also supported as a third mode.
     Switch between modes from the browser — no re-flash needed.
     Write the image, plug in your Stream Deck, power on — done.
     <br /><br />
@@ -98,19 +98,25 @@
 <details>
 <summary><h3>About The Project</h3></summary>
 
-This project mirrors the architecture of <a href="https://github.com/elliotmatson/companion-satellite-armbian">companion-satellite-armbian</a>
-but targets <strong>Bitfocus Buttons USB Relay (headless)</strong> instead of Companion Satellite — making it work on ARM single-board computers that aren't Raspberry Pis.
+This project extends the architecture of <a href="https://github.com/elliotmatson/companion-satellite-armbian">companion-satellite-armbian</a>
+to run on ARM single-board computers that aren't Raspberry Pis — turning any supported board into a
+<strong>Bitfocus Companion Satellite</strong> node (or a full <strong>Bitfocus Companion</strong> instance, on the Full image
+variant) out of the box. <strong>Bitfocus Buttons USB Relay</strong> is also supported as a third mode, for boards
+dedicated to driving a physical USB relay instead.
 
 The build pipeline is fully automated via GitHub Actions:
 <ol>
   <li>The Armbian build framework compiles a minimal Ubuntu Noble (24.04) base image for the target board.</li>
-  <li>The Bitfocus Buttons USB Relay <code>.tar.gz</code> package is pulled from this repo's <code>buttons-deb-mirror</code> release (maintained manually — no Bitfocus account or secrets needed in CI).</li>
-  <li>HashiCorp Packer chroots into the image, installs the Buttons <code>.deb</code>, then builds and installs Companion Satellite from source via the official install script. Both services are installed; <strong>Buttons is the default active mode</strong>.</li>
+  <li>HashiCorp Packer chroots into the image, installs Companion Satellite from source via the official install script,
+  installs Bitfocus Buttons USB Relay from this repo's <code>buttons-deb-mirror</code> release (maintained manually — no
+  Bitfocus account or secrets needed in CI), and — on the Full variant — installs full Bitfocus Companion itself.
+  All modes are installed; <strong>Companion Satellite is the default active mode</strong>, switchable to Buttons or
+  Companion at runtime with no re-flash.</li>
   <li>On first boot, <code>dpx-set-hostname.service</code> reads the board's Ethernet MAC address from sysfs and permanently sets the hostname to <code>dpx-buttonode-XXXX</code> (last 4 hex chars, e.g. <code>dpx-buttonode-C833</code>).</li>
   <li>The image is zeroed, gzip-compressed, and published as a GitHub Release.</li>
 </ol>
 
-> **Note on build time:** Companion Satellite is built from source inside the chroot (Node.js + Yarn build). This adds ~30–60 minutes to the total build time.
+> **Note on build time:** Companion Satellite is built from source inside the chroot (Node.js + Yarn build). This adds ~30–60 minutes to the total build time; the Full variant adds more on top for the full Companion install.
 
 A daily scheduled workflow checks whether the mirror release has a version that hasn't been built yet, and automatically triggers a full matrix build if so.
 
