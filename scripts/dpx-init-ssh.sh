@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 # dpx-init-ssh.sh
-# Generates a random root password on first boot and writes it where the
-# web UI (root-only, /etc) and the deck splash (buttons-group-readable,
-# /etc/dpx-buttonode-release-adjacent) can both show it. SSH itself stays
+# Generates a random root password on first boot and writes it group-
+# readable by `buttons` so dpx-deck-splash (already in that group for HID
+# access) can hold-to-reveal it on the deck's SSH key. SSH itself stays
 # disabled (see dpx-buttonode.pkr.hcl) — this only replaces the login
 # credential a future "Enable SSH" action would otherwise be gated behind.
 #
 # Why this exists: shipping every image with the same hardcoded root
 # password (the old default, "1234") meant anyone who'd read this repo's
 # own README knew every unit's login. A per-device random password
-# generated at first boot has nothing to look up — you have to actually
-# be able to see the device (its Stream Deck, or its web UI on the LAN)
-# to learn it. The web UI's SSH tab clears this file the moment the user
-# sets their own password, so it's a one-time, self-expiring credential.
+# generated at first boot has nothing to look up. Deliberately NOT shown
+# anywhere on the web UI (which has no login of its own, reachable by
+# anyone on the LAN) — the deck's hold-to-reveal SSH key is the only
+# place it's ever displayed, so learning it requires physical access to
+# the device. dpx-buttonode-ui.py's SSH tab deletes this file the moment
+# the user sets their own password, so it's a one-time, self-expiring
+# credential.
 #
 # Installed at: /usr/local/bin/dpx-init-ssh.sh
 # Managed by:   dpx-init-ssh.service (oneshot, runs once — see MARKER)
@@ -30,7 +33,19 @@ PASS_FILE="/etc/dpx-initial-ssh-password"
 # read off a Stream Deck key, long enough to not be trivially guessable
 # for the "keep honest people honest" bar this is aiming for, not
 # resistance to a targeted attacker with LAN access and time.
-PASS=$(tr -dc 'A-HJ-NP-Za-km-z2-9' < /dev/urandom | head -c 10)
+#
+# `head -c 10` closing early once it has enough bytes sends SIGPIPE back
+# up the pipe — with `set -o pipefail` that makes the whole pipeline exit
+# non-zero even though it produced exactly what we wanted (confirmed on
+# hardware: this killed the script under -e every time). Reading a fixed,
+# bounded chunk from /dev/urandom first and filtering it with `cut`
+# (which always reads to EOF, never closes early) avoids the SIGPIPE
+# entirely. 512 input bytes filtered through this ~58/256-char set
+# reliably yields well over 10 usable characters.
+# LC_ALL=C matters too: raw random bytes aren't valid UTF-8, and `tr` in
+# a UTF-8 locale can fail outright ("illegal byte sequence") trying to
+# multibyte-decode them — C locale makes it operate byte-for-byte instead.
+PASS=$(LC_ALL=C head -c 512 /dev/urandom | LC_ALL=C tr -dc 'A-HJ-NP-Za-km-z2-9' | cut -c1-10)
 
 echo "root:${PASS}" | chpasswd
 
