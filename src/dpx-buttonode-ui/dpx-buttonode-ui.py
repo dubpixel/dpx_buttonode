@@ -10,12 +10,14 @@ Zero external dependencies — uses Python 3 stdlib only.
 
 import crypt
 import http.server
+import json
 import os
 import re
 import socket
 import spwd
 import subprocess
 import sys
+import tarfile
 import threading
 import time
 import urllib.parse
@@ -37,6 +39,17 @@ SAT_BOOT_CFG   = Path("/boot/satellite-config")     # satellite's one-shot impor
 SATELLITE_API  = "http://localhost:9999"             # satellite REST API
 COMPANION_DIR  = Path("/opt/companion")              # present on full images only
 COMPANION_PORT = 8000                                # companion web UI port
+
+# ── On-device updates ────────────────────────────────────────────────────────
+GITHUB_API  = "https://api.github.com"
+GITHUB_REPO = "dubpixel/dpx_buttonode"
+UI_SCRIPT_PATH          = Path("/usr/local/bin/dpx-buttonode-ui.py")
+DECK_SPLASH_SCRIPT_PATH = Path("/usr/local/bin/dpx-deck-splash.py")
+BOOT_STATE_FILE = Path("/var/lib/dpx-buttonode-ui.boot-state")  # crash-loop detector, see __main__
+UPDATE_SATELLITE_LOG    = Path("/var/log/dpx-update-satellite.log")
+UPDATE_SATELLITE_STATUS = Path("/var/lib/dpx-update-satellite.status")  # running/ok/failed
+UPDATE_COMPANION_LOG    = Path("/var/log/dpx-update-companion.log")
+UPDATE_COMPANION_STATUS = Path("/var/lib/dpx-update-companion.status")
 
 # ── TTL cache ──────────────────────────────────────────────────────────────────
 # Subprocess calls (systemctl, lsusb, avahi-browse) are expensive.
@@ -345,8 +358,41 @@ def find_streamdeck_usb_path():
     return None
 
 
+def udev_retrigger():
+    """Nudge udev into reprocessing already-enumerated USB/HID devices,
+    without a bus-level reset or physical replug. Fixes a specific failure
+    mode confirmed live 2026-08-26: the kernel had hid-generic bound to a
+    Stream Deck the whole time (dmesg showed zero new events), but its
+    /dev/hidraw* node had been dropped and never got recreated after heavy
+    mode-switch churn — invisible to libusb-based consumers (deck-splash,
+    Satellite) but fatal to Companion's hidraw-only surface module.
+    Cheap and non-disruptive, so it's always worth trying before the
+    unbind/bind fallback below, which goes dark and previously needed an
+    actual physical replug to fully recover from in some cases."""
+    run(["udevadm", "trigger", "--subsystem-match=hid"])
+    run(["udevadm", "trigger", "--subsystem-match=usb"])
+    time.sleep(1)
+
+
+def _has_hidraw(port_path):
+    """True if the USB device at `port_path` (e.g. '1-1') has a live
+    /dev/hidraw* node under any of its interfaces. Used to decide whether
+    udev_retrigger() alone already fixed things, so the disruptive
+    unbind/bind fallback can be skipped when it's not actually needed."""
+    return any(Path("/sys/bus/usb/devices").glob(f"{port_path}*/**/hidraw/hidraw*"))
+
+
 def usb_power_cycle(port_path, delay=2):
-    """Unbind then rebind a USB port. Deck goes dark for `delay` seconds."""
+    """Unbind then rebind a USB port. Deck goes dark for `delay` seconds.
+    Always tries the gentle udev_retrigger() first — see its docstring —
+    and skips the disruptive unbind/bind entirely if that alone already
+    restored a working hidraw node, so the deck only goes dark when the
+    lighter fix genuinely wasn't enough (e.g. the USB error -110 case
+    documented in ROADMAP.md that needed a real physical replug even
+    after this same unbind/bind)."""
+    udev_retrigger()
+    if _has_hidraw(port_path):
+        return True, ""
     unbind = Path("/sys/bus/usb/drivers/usb/unbind")
     bind   = Path("/sys/bus/usb/drivers/usb/bind")
     try:
@@ -466,6 +512,7 @@ def page(content, tab="status", alert="", alert_cls="a-ok"):
         ("nodes",    "/nodes",    "Nodes"),
         ("mode",     "/mode",     "Mode"),
         ("ssh",      "/ssh",      "SSH"),
+        ("updates",  "/updates",  "Updates"),
     ]
     nav = "".join(
         f'<a href="{u}" class="{"on" if t == tab else ""}">{n}</a>'
@@ -867,6 +914,321 @@ def _get_build_info_raw():
     return info
 
 
+def invalidate_build_info_cache():
+    """Force the next get_build_info() call to re-read RELEASE_FILE instead
+    of serving the 1h-stale cached dict — call after anything writes to
+    /etc/dpx-buttonode-release (version bumps from an applied update)."""
+    with _cache_lock:
+        _cache.pop("build_info", None)
+
+
+# ── On-device update checks ──────────────────────────────────────────────────
+# Four independent components, four independent check functions — they hit
+# different repos with different tag formats and answer genuinely different
+# questions ("is there a newer dpx_buttonode build" vs "is there a newer
+# Buttons .deb in our mirror" vs two separate upstream Bitfocus projects), so
+# there's no shared abstraction beyond _github_get()/_cached() below. Each
+# returns {"current", "latest", "available", "checked_at"} and never raises —
+# a network failure just means "unknown"/not-available, not a broken page.
+
+def _github_get(path):
+    """GET a GitHub API path, return parsed JSON or None on ANY failure
+    (network, timeout, non-200, bad JSON, rate-limited). Unauthenticated —
+    60 req/hr limit, comfortably enough for four checks capped at one real
+    request per hour each via _cached(). GitHub requires a User-Agent header
+    or it 403s outright, easy to miss."""
+    try:
+        req = urllib.request.Request(
+            f"{GITHUB_API}{path}",
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "dpx-buttonode-ui"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read().decode())
+    except Exception:
+        return None
+
+
+def _extract_dpx_version(tag_name):
+    """Release tags look like dpx-buttnode-<buttons_version>-build<dpx_version>
+    (note: historical tag spelling "buttnode" predates this project's rename
+    to "buttonode" — tolerate both, don't try to fix old tags retroactively).
+    Returns the trailing build version, or None if the tag doesn't match at
+    all (treated as "no update detected" by callers — fail safe, not loud).
+    """
+    m = re.search(r"-build(.+)$", tag_name or "")
+    return m.group(1) if m else None
+
+
+def _check_dpx_update():
+    current = get_build_info().get("dpx_version", "unknown")
+    data = _github_get(f"/repos/{GITHUB_REPO}/releases/latest")
+    tag = data.get("tag_name") if data else None
+    latest = _extract_dpx_version(tag)
+    return {
+        "current": current, "latest": latest or "unknown",
+        "available": bool(latest and latest != current),
+        "tag": tag, "checked_at": time.time(),
+    }
+
+
+def _check_buttons_update():
+    current = get_build_info().get("buttons_version", "unknown")
+    data = _github_get(f"/repos/{GITHUB_REPO}/releases/tags/buttons-deb-mirror")
+    latest = None
+    if data:
+        for asset in data.get("assets", []):
+            name = asset.get("name", "")
+            # bitfocus-buttons-usb-relay-headless_<version>_arm64.tar.gz
+            m = re.search(r"_([^_]+)_arm64\.tar\.gz$", name)
+            if m:
+                latest = m.group(1)
+                break
+    return {
+        "current": current, "latest": latest or "unknown",
+        "available": bool(latest and latest != current),
+        "checked_at": time.time(),
+    }
+
+
+def _check_satellite_update():
+    current = get_build_info().get("satellite_version", "unknown")
+    data = _github_get("/repos/bitfocus/companion-satellite/releases/latest")
+    tag = data.get("tag_name") if data else None
+    latest = tag.lstrip("v") if tag else None
+    return {
+        "current": current, "latest": latest or "unknown",
+        "available": bool(latest and latest != current),
+        "checked_at": time.time(),
+    }
+
+
+def _check_companion_update():
+    current = get_build_info().get("companion_version", "unknown")
+    data = _github_get("/repos/bitfocus/companion-pi/releases/latest")
+    tag = data.get("tag_name") if data else None
+    latest = tag.lstrip("v") if tag else None
+    return {
+        "current": current, "latest": latest or "unknown",
+        "available": bool(latest and latest != current),
+        "checked_at": time.time(),
+    }
+
+
+UPDATE_CHECKS = {
+    "dpx": _check_dpx_update,
+    "buttons": _check_buttons_update,
+    "satellite": _check_satellite_update,
+    "companion": _check_companion_update,
+}
+
+
+def get_update_status(component, force=False):
+    """1h TTL cache per component, same _cached() helper everything else in
+    this file uses. `force=True` (the "Check Now" button) drops the cache
+    entry first so the next read genuinely hits the network."""
+    if force:
+        with _cache_lock:
+            _cache.pop(f"update_{component}", None)
+    return _cached(f"update_{component}", 3600, UPDATE_CHECKS[component])
+
+
+def _update_release_field(key, value):
+    """Rewrite a single KEY=value line in RELEASE_FILE, adding it if
+    missing. Simple full-file rewrite — this file is a handful of lines,
+    no need for anything fancier."""
+    try:
+        lines = RELEASE_FILE.read_text().splitlines()
+    except Exception:
+        lines = []
+    key = key.upper()
+    found = False
+    new_lines = []
+    for line in lines:
+        if line.strip().upper().startswith(f"{key}="):
+            new_lines.append(f"{key}={value}")
+            found = True
+        else:
+            new_lines.append(line)
+    if not found:
+        new_lines.append(f"{key}={value}")
+    RELEASE_FILE.write_text("\n".join(new_lines) + "\n")
+
+
+def _download_url(url, timeout=15):
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "dpx-buttonode-ui"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read()
+    except Exception:
+        return None
+
+
+def _validate_python_file(data, sentinel):
+    """Cheap pre-check (size + a known-stable sentinel string) followed by
+    a real `python3 -m py_compile` on a temp copy — catches truncated
+    downloads and syntax errors the sentinel alone wouldn't. Returns
+    (ok: bool, tmp_path or None). Caller is responsible for cleaning up
+    tmp_path on the success path (it gets consumed by os.replace())."""
+    if not data or len(data) < 1000 or sentinel.encode() not in data:
+        return False, None
+    tmp_path = Path(f"/tmp/dpx-update-{os.getpid()}-{int(time.time())}.py")
+    tmp_path.write_bytes(data)
+    _, _, rc = run(["python3", "-m", "py_compile", str(tmp_path)])
+    if rc != 0:
+        tmp_path.unlink(missing_ok=True)
+        return False, None
+    return True, tmp_path
+
+
+def _backup_and_replace(live_path, new_path):
+    """Timestamped backup of the live file, then atomic swap. Keeps only
+    the single most recent backup per file — no rotation system needed at
+    this scale, and BOOT_STATE_FILE's crash-recovery logic (see __main__)
+    only ever needs the latest one anyway."""
+    ts = int(time.time())
+    bak_path = live_path.with_name(live_path.name + f".bak-{ts}")
+    for old in live_path.parent.glob(f"{live_path.name}.bak-*"):
+        old.unlink(missing_ok=True)
+    if live_path.exists():
+        run(["cp", "-p", str(live_path), str(bak_path)])
+    os.replace(str(new_path), str(live_path))
+    os.chmod(str(live_path), 0o755)
+
+
+def apply_dpx_update():
+    """Downloads+validates+swaps BOTH dpx-buttonode-ui.py and
+    dpx-deck-splash.py from the same release tag (they ship together),
+    then restarts both services. The self-restart is last and detached —
+    this process's own socket dies the moment it fires. Returns (ok, msg).
+    """
+    status = get_update_status("dpx")
+    tag = status.get("tag")
+    if not tag:
+        return False, "No release tag available — check for updates first"
+
+    base = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{tag}"
+    files = [
+        (f"{base}/src/dpx-buttonode-ui/dpx-buttonode-ui.py", UI_SCRIPT_PATH, "PORT = 8080"),
+        (f"{base}/src/dpx-deck-splash/dpx-deck-splash.py", DECK_SPLASH_SCRIPT_PATH, "dpx-deck-splash"),
+    ]
+    swapped = []
+    for url, live_path, sentinel in files:
+        data = _download_url(url)
+        ok, tmp_path = _validate_python_file(data, sentinel)
+        if not ok:
+            return False, f"Failed to download/validate {live_path.name} — nothing was changed" if not swapped \
+                else f"Failed to download/validate {live_path.name} — {swapped[0]} was already updated, the other was not"
+        _backup_and_replace(live_path, tmp_path)
+        swapped.append(live_path.name)
+
+    _update_release_field("DPX_VERSION", status["latest"])
+    invalidate_build_info_cache()
+
+    run(["systemctl", "restart", "dpx-deck-splash"])
+    run(["systemd-run", "--no-block", "--quiet", "systemctl", "restart", "dpx-buttonode-ui"])
+    return True, f"Updating to {status['latest']} — restarting..."
+
+
+def apply_buttons_update():
+    """Downloads the current buttons-deb-mirror tarball, dkpg -i's the
+    .deb inside it, and restarts the Buttons service ONLY if it's
+    currently the active mode — never force-switches mode. Returns
+    (ok, msg)."""
+    status = get_update_status("buttons")
+    data = _github_get(f"/repos/{GITHUB_REPO}/releases/tags/buttons-deb-mirror")
+    if not data:
+        return False, "Could not reach GitHub to fetch the mirror release"
+    asset_url = next(
+        (a.get("browser_download_url") for a in data.get("assets", [])
+         if a.get("name", "").endswith(".tar.gz")),
+        None,
+    )
+    if not asset_url:
+        return False, "No .tar.gz asset found in the mirror release"
+
+    tar_data = _download_url(asset_url, timeout=30)
+    if not tar_data:
+        return False, "Failed to download the Buttons package"
+
+    tmp_dir = Path(f"/tmp/dpx-buttons-update-{int(time.time())}")
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tar_path = tmp_dir / "buttons.tar.gz"
+    tar_path.write_bytes(tar_data)
+
+    try:
+        with tarfile.open(tar_path) as tf:
+            tf.extractall(tmp_dir)
+    except Exception as e:
+        run(["rm", "-rf", str(tmp_dir)])
+        return False, f"Failed to extract package: {e}"
+
+    deb_path = next(tmp_dir.rglob("*.deb"), None)
+    if not deb_path:
+        run(["rm", "-rf", str(tmp_dir)])
+        return False, "No .deb found inside the downloaded package"
+
+    _, err, rc = run(["dpkg", "-i", str(deb_path)])
+    if rc != 0:
+        _, err2, rc2 = run(["apt-get", "install", "-f", "-y"])
+        if rc2 != 0:
+            run(["rm", "-rf", str(tmp_dir)])
+            return False, f"Install failed: {err2 or err}"
+
+    if get_dpx_mode() == "buttons":
+        run(["systemctl", "restart", "bitfocus-buttons-usb-relay"])
+
+    _update_release_field("BUTTONS_VERSION", status["latest"])
+    invalidate_build_info_cache()
+    run(["rm", "-rf", str(tmp_dir)])
+    return True, f"Buttons updated to {status['latest']}"
+
+
+def apply_component_update(component):
+    """Kicks off the Satellite/Companion update scripts as a detached
+    systemd-run job — these take 15-60 min on-device, must not block the
+    HTTP request. The scripts themselves write progress/status; this just
+    launches them. Returns (ok, msg) reflecting whether the LAUNCH
+    succeeded, not whether the update itself will succeed."""
+    script = {
+        "satellite": "/usr/local/bin/update-satellite.sh",
+        "companion": "/usr/local/bin/update-companion.sh",
+    }.get(component)
+    if not script:
+        return False, "Unknown component"
+    if not Path(script).exists():
+        return False, f"{script} not installed on this image"
+    _, err, rc = run(["systemd-run", "--no-block", "--quiet", "--unit",
+                       f"dpx-update-{component}", script])
+    if rc != 0:
+        return False, f"Failed to launch update: {err}"
+    return True, f"{component.capitalize()} update started — this can take up to an hour"
+
+
+def get_component_update_progress(component):
+    """Reads the status marker + tail of the log file the background
+    update script writes, for the Updates tab to poll. Never raises."""
+    status_file = {
+        "satellite": UPDATE_SATELLITE_STATUS,
+        "companion": UPDATE_COMPANION_STATUS,
+    }.get(component)
+    log_file = {
+        "satellite": UPDATE_SATELLITE_LOG,
+        "companion": UPDATE_COMPANION_LOG,
+    }.get(component)
+    status = "idle"
+    tail = ""
+    try:
+        status = status_file.read_text().strip() or "idle"
+    except Exception:
+        pass
+    try:
+        lines = log_file.read_text().splitlines()
+        tail = "\n".join(lines[-15:])
+    except Exception:
+        pass
+    return {"status": status, "log_tail": tail}
+
+
 def get_satellite_config():
     """Return (host, port) from /etc/dpx-satellite.conf.
     Falls back to empty host and default port 16622.
@@ -1058,6 +1420,82 @@ def render_ssh(alert="", alert_cls="a-ok"):
     return page(body, "ssh", alert, alert_cls)
 
 
+def _update_card(title, status, apply_action, in_flight=False):
+    current = esc(status.get("current", "unknown"))
+    latest  = esc(status.get("latest", "unknown"))
+    available = status.get("available", False)
+    badge = (
+        '<span class="badge badge-on">update available</span>' if available
+        else '<span class="badge badge-off">up to date</span>'
+    )
+    btn = ""
+    if in_flight:
+        btn = '<span class="badge badge-off">updating…</span>'
+    elif available:
+        btn = (
+            f'<form method="POST" action="/updates" style="display:inline">'
+            f'<input type="hidden" name="action" value="{apply_action}">'
+            f'<button type="submit" class="btn btn-p">Update to {latest}</button>'
+            f'</form>'
+        )
+    return f"""
+<div class="sec">
+  <h2>{esc(title)}</h2>
+  <p class="note">Status: {badge}</p>
+  <p class="note">Current: <code>{current}</code> &nbsp;&middot;&nbsp; Latest: <code>{latest}</code></p>
+  <div style="margin-top:10px">{btn}</div>
+</div>"""
+
+
+def render_updates(alert="", alert_cls="a-ok"):
+    dpx    = get_update_status("dpx")
+    btns   = get_update_status("buttons")
+    sat    = get_update_status("satellite")
+    bld    = get_build_info()
+    has_companion = bld.get("variant") == "full"
+    comp   = get_update_status("companion") if has_companion else None
+
+    sat_prog  = get_component_update_progress("satellite")
+    comp_prog = get_component_update_progress("companion") if has_companion else {"status": "idle"}
+    sat_running  = sat_prog.get("status") == "running"
+    comp_running = comp_prog.get("status") == "running"
+
+    refresh = '<meta http-equiv="refresh" content="15">' if (sat_running or comp_running) else ""
+    warn_box = ""
+    if sat_running or comp_running:
+        warn_box = (
+            '<div class="sec" style="border:2px solid #e3b341">'
+            '<h2>⚠ Update In Progress</h2>'
+            '<p class="note">This can take up to an hour. Do not power off the device. '
+            'This page refreshes itself every 15s.</p>'
+            + (f'<pre style="white-space:pre-wrap;font-size:11px;color:#8b949e">{esc(sat_prog.get("log_tail",""))}</pre>' if sat_running else "")
+            + (f'<pre style="white-space:pre-wrap;font-size:11px;color:#8b949e">{esc(comp_prog.get("log_tail",""))}</pre>' if comp_running else "")
+            + '</div>'
+        )
+
+    check_form = (
+        '<form method="POST" action="/updates" style="display:inline">'
+        '<input type="hidden" name="action" value="check">'
+        '<button type="submit" class="btn">Check Now</button>'
+        '</form>'
+    )
+
+    body = f"""
+{refresh}
+<div class="sec">
+  <h2>Software Updates</h2>
+  <p class="note">Checked against GitHub Releases, cached for up to an hour. Nothing installs itself — every update is a button push here.</p>
+  <div style="margin-top:10px">{check_form}</div>
+</div>
+{warn_box}
+{_update_card("dpx-buttonode (web UI + deck splash)", dpx, "apply-dpx")}
+{_update_card("Bitfocus Buttons USB Relay", btns, "apply-buttons")}
+{_update_card("Companion Satellite", sat, "apply-satellite", in_flight=sat_running)}
+{_update_card("Bitfocus Companion (full)", comp, "apply-companion", in_flight=comp_running) if has_companion else ""}
+"""
+    return page(body, "updates", alert, alert_cls)
+
+
 # ── Request handler ────────────────────────────────────────────────────────────
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -1129,6 +1567,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.html(render_mode(alert, alert_cls))
         elif path == "/ssh":
             self.html(render_ssh(alert, alert_cls))
+        elif path == "/updates":
+            self.html(render_updates(alert, alert_cls))
         elif path in ("/favicon.png", "/favicon.ico"):
             favicon = Path("/usr/local/bin/fav_icon.png")
             if favicon.exists():
@@ -1349,7 +1789,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         f"{SATELLITE_API}/api/config",
                         data=body.encode(),
                         method="POST",
-                        headers={{"Content-Type": "application/json"}},
+                        headers={"Content-Type": "application/json"},
                     )
                     urllib.request.urlopen(req, timeout=3)
                 except Exception:
@@ -1375,6 +1815,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.html(render_ssh(alert=("✓ " if ok else "✗ ") + esc(msg), alert_cls="a-ok" if ok else "a-err"))
             else:
                 self.html(render_ssh(alert="✗ Invalid action", alert_cls="a-err"))
+
+        # ── /updates ────────────────────────────────────────────────────
+        elif path == "/updates":
+            action = params.get("action", "")
+            if action == "check":
+                for component in UPDATE_CHECKS:
+                    if component == "companion" and get_build_info().get("variant") != "full":
+                        continue
+                    get_update_status(component, force=True)
+                self.html(render_updates(alert="✓ Checked for updates", alert_cls="a-ok"))
+            elif action == "apply-dpx":
+                ok, msg = apply_dpx_update()
+                self.html(render_updates(alert=("✓ " if ok else "✗ ") + esc(msg), alert_cls="a-ok" if ok else "a-err"))
+            elif action == "apply-buttons":
+                ok, msg = apply_buttons_update()
+                self.html(render_updates(alert=("✓ " if ok else "✗ ") + esc(msg), alert_cls="a-ok" if ok else "a-err"))
+            elif action == "apply-satellite":
+                ok, msg = apply_component_update("satellite")
+                self.html(render_updates(alert=("✓ " if ok else "✗ ") + esc(msg), alert_cls="a-ok" if ok else "a-err"))
+            elif action == "apply-companion":
+                ok, msg = apply_component_update("companion")
+                self.html(render_updates(alert=("✓ " if ok else "✗ ") + esc(msg), alert_cls="a-ok" if ok else "a-err"))
+            else:
+                self.html(render_updates(alert="✗ Invalid action", alert_cls="a-err"))
 
         else:
             self.html("<html><body><h1>Not found</h1></body></html>", 404)
@@ -1412,6 +1876,41 @@ if __name__ == "__main__":
         ok, msg = pin_static(sys.argv[2])
         print(msg)
         sys.exit(0 if ok else 1)
+
+    # Crash-recovery: a self-update that compiles fine but throws before
+    # the server ever binds would otherwise restart-loop forever under
+    # systemd's Restart=on-failure with no way to recover short of SSH/
+    # physical access. Track boot attempts in a small window; too many too
+    # fast means the currently-live file is bad, so restore the last known-
+    # good backup (written by _backup_and_replace() during apply_dpx_update)
+    # and let systemd's next restart come up on that instead.
+    CRASH_WINDOW_SECONDS = 60
+    CRASH_THRESHOLD = 3
+    try:
+        attempts = json.loads(BOOT_STATE_FILE.read_text())
+        if not isinstance(attempts, list):
+            attempts = []
+    except Exception:
+        attempts = []
+    now = time.time()
+    attempts = [t for t in attempts if now - t < CRASH_WINDOW_SECONDS]
+    attempts.append(now)
+    try:
+        BOOT_STATE_FILE.write_text(json.dumps(attempts))
+    except Exception:
+        pass
+    if len(attempts) > CRASH_THRESHOLD:
+        backups = sorted(UI_SCRIPT_PATH.parent.glob(f"{UI_SCRIPT_PATH.name}.bak-*"))
+        if backups:
+            print(f"dpx-buttonode-ui: {len(attempts)} boot attempts in "
+                  f"{CRASH_WINDOW_SECONDS}s — restoring {backups[-1].name}")
+            os.replace(str(backups[-1]), str(UI_SCRIPT_PATH))
+            os.chmod(str(UI_SCRIPT_PATH), 0o755)
+            try:
+                BOOT_STATE_FILE.unlink()
+            except Exception:
+                pass
+            sys.exit(1)
 
     server = http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print(f"dpx-buttonode-ui listening on :{PORT}")
