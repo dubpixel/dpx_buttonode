@@ -69,9 +69,23 @@ From any buttonode's web UI, show all other buttonodes visible on the local netw
 
 ## On-Device Auto-Update
 
-**Status:** planned — `- [ ]`
+**Status:** code complete, not yet hardware-tested `- [x]` code / `- [ ]` hardware test
 
 When the unit can see the internet, offer to update itself in-place. No custom server needed — the GitHub Releases API is the source of truth. No full image re-flash (not feasible OTA) — updates target only the Python UI file initially.
+
+New **Updates** tab in `dpx-buttonode-ui.py` covers all four components: the
+`dpx-buttonode-ui.py`/`dpx-deck-splash.py` pair self-update with a
+validate-then-atomic-swap-then-restart flow, backed by a boot-attempt
+counter that auto-restores the last known-good backup if the new file
+crash-loops on startup. Buttons updates by downloading and `dpkg -i`-ing the
+latest `.deb` from the `buttons-deb-mirror` release, restarting the service
+only if Buttons is the currently active mode. Satellite and full Companion
+(via new `scripts/update-satellite.sh` / `scripts/update-companion.sh` —
+deliberately not reuses of the install scripts, which unconditionally
+force-switch mode) run as detached `systemd-run --no-block` background jobs
+with log/status files the Updates tab polls, and likewise only restart their
+service if it's already the active mode. Full scope, not a minimal
+self-updater, per explicit decision.
 
 ### Scope
 
@@ -83,14 +97,14 @@ When the unit can see the internet, offer to update itself in-place. No custom s
 
 ### How It Works
 
-**Version source:** `GET https://api.github.com/repos/dubpixel/dpx_buttons_armbian/releases/latest` — parse `tag_name`, compare against `DPX_VERSION` from `/etc/dpx-buttonode-release`. Unauthenticated GitHub API, 60 req/hr limit — a 1h TTL cache keeps this well within bounds.
+**Version source:** `GET https://api.github.com/repos/dubpixel/dpx_buttonode/releases/latest` — parse `tag_name`, compare against `DPX_VERSION` from `/etc/dpx-buttonode-release`. Unauthenticated GitHub API, 60 req/hr limit — a 1h TTL cache keeps this well within bounds.
 
 **Internet check:** `urllib.request.urlopen("https://api.github.com", timeout=3)` — pure stdlib, no new dependencies.
 
 **Boot check:** Background daemon thread (30s startup delay to let network settle) calls `get_update_status()` and persists result to `/var/lib/dpx-update-status` (JSON). UI reads the cached file — no blocking.
 
 **Apply mechanism (Phase 1):**
-1. Download raw `dpx-buttonode-ui.py` from `https://raw.githubusercontent.com/dubpixel/dpx_buttons_armbian/{latest_tag}/src/dpx-buttonode-ui/dpx-buttonode-ui.py` to `/tmp/`
+1. Download raw `dpx-buttonode-ui.py` from `https://raw.githubusercontent.com/dubpixel/dpx_buttonode/{latest_tag}/src/dpx-buttonode-ui/dpx-buttonode-ui.py` to `/tmp/`
 2. Validate: file size > 1000 bytes, contains `PORT = 8080` sentinel
 3. `os.replace()` atomic swap to `/usr/local/bin/dpx-buttonode-ui.py`
 4. `systemd-run --no-block systemctl restart dpx-buttonode-ui` (existing pattern from `write_networkd_config`)

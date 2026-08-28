@@ -54,3 +54,7 @@ build/
 
 # Copilot chat history export (personal, not for repo history)
 _chat-history/
+
+# Local device access notes (hostnames/IPs/credentials for physical test
+# hardware) — never belongs in repo history, even as a stale/rotated value.
+ACCESS.md
