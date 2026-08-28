@@ -165,30 +165,29 @@ build {
     ]
   }
 
-  # Copy the Companion Satellite install script into the image
-  provisioner "file" {
-    source      = "scripts/install-satellite.sh"
-    destination = "/tmp/install-satellite.sh"
-  }
-
-  # Install Companion Satellite (headless, stable build — runs as root)
-  # Downloads from GitHub inside the chroot; requires internet access.
-  # Installs but leaves disabled by default (dpx-buttonode-ui Mode tab activates it).
-  provisioner "shell" {
-    execute_command = "chmod +x {{ .Path }}; {{ .Vars }} su root -c {{ .Path }}"
-    inline_shebang  = "/bin/bash -e"
-    inline = [
-      "chmod +x /tmp/install-satellite.sh",
-      "/tmp/install-satellite.sh"
-    ]
-  }
-
   # ── Full variant only: install Bitfocus Companion ──────────────────────────
   # Skipped on lite builds. Companion is a pre-built arm64 download (~500MB-2GB).
   # Adds ~15-25 min to build time (download + extract, no compile step).
+  #
+  # MUST run before install-satellite.sh, not after — discovered the hard way
+  # 2026-08-26. companion-pi's own official installer unconditionally purges
+  # /opt/fnm as its final step ("fnm is no longer used by the modern flow"),
+  # but Satellite's systemd unit and our install-satellite.sh/update-satellite.sh
+  # both hard-depend on /opt/fnm/aliases/default/bin/node. Satellite's own
+  # installer freshly reprovisions /opt/fnm every time it runs, so as long as
+  # it runs LAST, this is a non-issue — but with the old order (Satellite then
+  # Companion), every full-variant build shipped with Satellite silently broken
+  # from first boot (systemd: "Control process exited, code=exited, status=203/EXEC").
   provisioner "file" {
     source      = "scripts/install-companion.sh"
     destination = "/tmp/install-companion.sh"
+  }
+
+  # Copy the Companion on-device update script (installed to
+  # /usr/local/bin by install-companion.sh, invoked by the Updates tab)
+  provisioner "file" {
+    source      = "scripts/update-companion.sh"
+    destination = "/tmp/update-companion.sh"
   }
 
   provisioner "shell" {
@@ -197,6 +196,33 @@ build {
     inline = [
       "chmod +x /tmp/install-companion.sh",
       "if [ '${var.variant}' = 'full' ]; then /tmp/install-companion.sh; else echo '==> Skipping Companion install (lite variant)'; fi"
+    ]
+  }
+
+  # Copy the Companion Satellite install script into the image
+  provisioner "file" {
+    source      = "scripts/install-satellite.sh"
+    destination = "/tmp/install-satellite.sh"
+  }
+
+  # Copy the Companion Satellite on-device update script (installed to
+  # /usr/local/bin by install-satellite.sh, invoked by the Updates tab)
+  provisioner "file" {
+    source      = "scripts/update-satellite.sh"
+    destination = "/tmp/update-satellite.sh"
+  }
+
+  # Install Companion Satellite (headless, stable build — runs as root)
+  # Downloads from GitHub inside the chroot; requires internet access.
+  # Installs but leaves disabled by default (dpx-buttonode-ui Mode tab activates it).
+  # Runs LAST (after Companion, on full-variant builds) — see the fnm-purge
+  # note on the Companion block above for why the order matters.
+  provisioner "shell" {
+    execute_command = "chmod +x {{ .Path }}; {{ .Vars }} su root -c {{ .Path }}"
+    inline_shebang  = "/bin/bash -e"
+    inline = [
+      "chmod +x /tmp/install-satellite.sh",
+      "/tmp/install-satellite.sh"
     ]
   }
 }

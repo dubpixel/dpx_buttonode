@@ -29,6 +29,13 @@ rm -f /tmp/satellite-official-install.sh
 
 echo "==> Companion Satellite installed"
 
+# ── Install the on-device update script ───────────────────────────────────────
+# Invoked by dpx-buttonode-ui.py's Updates tab (apply_component_update()) via
+# systemd-run --no-block. See scripts/update-satellite.sh for why this is a
+# separate script rather than a re-run of this one.
+install -m 0755 /tmp/update-satellite.sh /usr/local/bin/update-satellite.sh
+echo "==> update-satellite.sh installed to /usr/local/bin"
+
 # ── Default mode: Satellite ────────────────────────────────────────────────────
 # Only one of buttons/satellite/companion runs at a time. Default mode is
 # Companion Satellite, not Buttons — most units are meant to sit in a

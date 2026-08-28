@@ -38,9 +38,19 @@ rm -f /tmp/companion-official-install.sh
 
 echo "==> Bitfocus Companion installed"
 
+# ── Install the on-device update script ───────────────────────────────────────
+# Invoked by dpx-buttonode-ui.py's Updates tab (apply_component_update()) via
+# systemd-run --no-block. See scripts/update-companion.sh for why this is a
+# separate script rather than a re-run of this one.
+install -m 0755 /tmp/update-companion.sh /usr/local/bin/update-companion.sh
+echo "==> update-companion.sh installed to /usr/local/bin"
+
 # ── Disable by default ────────────────────────────────────────────────────────
 # Only one service runs at a time. Default mode is Satellite (set in
-# install-satellite.sh, which runs before this on Full-variant builds).
+# install-satellite.sh, which runs AFTER this one on Full-variant builds —
+# deliberately: companion-pi's installer purges /opt/fnm as a final step,
+# which Satellite still depends on, so Satellite must always install last.
+# See the ordering note in dpx-buttonode.pkr.hcl).
 # dpx-buttonode-ui Mode tab handles enable/disable at runtime.
 systemctl disable companion
 echo "==> companion.service: installed but DISABLED (default mode: satellite)"
