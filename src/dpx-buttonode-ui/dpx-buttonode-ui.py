@@ -1035,12 +1035,37 @@ def _check_satellite_update():
 
 
 def _check_companion_update():
-    current = get_build_info().get("companion_version", "unknown")
-    data = _github_get("/repos/bitfocus/companion-pi/releases/latest")
-    tag = data.get("tag_name") if data else None
-    latest = tag.lstrip("v") if tag else None
+    """Companion's real release source is a Bitfocus-hosted API, not
+    GitHub Releases. Found live 2026-08-29 checking why this always
+    reported "unknown": bitfocus/companion-pi (which install-companion.sh
+    downloads its *installer* from) has zero GitHub releases of its own
+    -- the actual build artifacts are served from api.bitfocus.io, per
+    companion-pi's own update-prompt/main.py (the interactive version
+    picker update.sh invokes)."""
+    current_raw = get_build_info().get("companion_version", "unknown")
+    # Our stored version includes the build hash (e.g.
+    # "5.0.4+9717-stable-a69c14dec2"); the API only gives the bare
+    # semver ("v5.0.4") -- compare on just the leading X.Y.Z.
+    m = re.match(r"(\d+\.\d+\.\d+)", current_raw)
+    current = m.group(1) if m else current_raw
+    try:
+        req = urllib.request.Request(
+            "https://api.bitfocus.io/v1/product/companion/packages",
+            headers={"Accept": "application/json", "User-Agent": "dpx-buttonode-ui"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception:
+        data = None
+    latest, latest_published = None, None
+    for pkg in (data or {}).get("packages", []):
+        if pkg.get("target") != "linux-arm64-tgz":
+            continue
+        published = pkg.get("published", "")
+        if latest_published is None or published > latest_published:
+            latest_published, latest = published, (pkg.get("version") or "").lstrip("v")
     return {
-        "current": current, "latest": latest or "unknown",
+        "current": current_raw, "latest": latest or "unknown",
         "available": bool(latest and latest != current),
         "checked_at": time.time(),
     }
