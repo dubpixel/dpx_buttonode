@@ -127,7 +127,8 @@ Update the `## PROJECT: dpx-buttonode` section in `AGENTS.md`:
 - **Status line** — current version + date + ✅ or 🚧
 - **Branch line** — current working branch (or `main` if on main)
 - **Version File line** — current version number
-- **Architecture table** — add any new components, update paths or notes if things moved
+- **Architecture table** — add any new components, update paths or notes if things moved; reread the intro paragraph too, not just the table rows — it goes stale just as easily (e.g. describing a single build pipeline after a second one was added)
+- **Gotchas & Landmines** — this is the step most likely to get skipped, so check it explicitly every time: did this sprint's work involve debugging a non-obvious failure, a wrong assumption that cost real time, or a fix for something that isn't visible just from reading the code? If so, it needs a numbered gotcha entry (bug/error text, root cause, the fix, and the date confirmed live) — not just a CHANGELOG line. CHANGELOG says *what* shipped; a gotcha preserves *why a future agent shouldn't redo the same mistake*. Skim git commit messages and diffs from this sprint's range for `fix:`/`bug`/wording like "confirmed live" as a prompt for what might need one.
 
 Do NOT modify the global directives sections of AGENTS.md (§1 through §6 boilerplate) — only the `## PROJECT` block.
 
@@ -150,6 +151,7 @@ Before finishing, confirm:
 - [ ] CHANGELOG has an entry for this version with today's date
 - [ ] README Prerequisites and paths are accurate
 - [ ] AGENTS.md Status line shows correct version and date
+- [ ] AGENTS.md Gotchas & Landmines has an entry for any non-obvious bug/fix from this sprint
 - [ ] ROADMAP completed items are checked off
 - [ ] No placeholder text left in docs (e.g. `[Project Name]`, `[e.g., ...]`)
 - [ ] README confirmed with user before committing (per AGENTS.md §6)
