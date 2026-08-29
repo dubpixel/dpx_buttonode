@@ -39,6 +39,7 @@ SAT_BOOT_CFG   = Path("/boot/satellite-config")     # satellite's one-shot impor
 SATELLITE_API  = "http://localhost:9999"             # satellite REST API
 COMPANION_DIR  = Path("/opt/companion")              # present on full images only
 COMPANION_PORT = 8000                                # companion web UI port
+DASHBOARD_SERVICE = "dpx-dashboard"                  # Companion Dashboard kiosk display
 
 # ── On-device updates ────────────────────────────────────────────────────────
 GITHUB_API  = "https://api.github.com"
@@ -713,8 +714,36 @@ def render_devices(alert="", alert_cls="a-ok"):
     <button type="submit" class="btn btn-w">↺ Restart Buttons</button>
   </form>
   <a href="/" class="btn">Back</a>
-</div>"""
+</div>
+{dashboard_section()}"""
     return page(body, "devices", alert, alert_cls)
+
+
+def dashboard_section():
+    """Companion Dashboard toggle — independent of mode, only shown if
+    install-dashboard.sh actually installed the unit on this image."""
+    if not dashboard_installed():
+        return ""
+    on = dashboard_enabled()
+    badge = (
+        '<span class="badge badge-on">● running</span>' if on else
+        '<span class="badge badge-off">○ stopped</span>'
+    )
+    action = "disable" if on else "enable"
+    label  = "⏻ Turn Off" if on else "⏻ Turn On"
+    return f"""
+<div class="sec"><h2>Companion Dashboard</h2>
+  <p class="note">
+    Opt-in kiosk display {badge}<br>
+    Runs alongside whatever mode (Buttons/Satellite/Companion) is active.
+    Needs an attached HDMI display. Configure which Companion instance it
+    points at from its own on-screen settings after enabling.
+  </p>
+  <form method="POST" action="/dashboard" style="display:inline">
+    <input type="hidden" name="action" value="{action}">
+    <button type="submit" class="btn {'btn-w' if on else 'btn-p'}">{label}</button>
+  </form>
+</div>"""
 
 
 def render_nodes(alert="", alert_cls="a-ok"):
@@ -771,6 +800,30 @@ def get_dpx_mode():
 def companion_installed():
     """True if full Companion is installed (Full image variant)."""
     return COMPANION_DIR.exists()
+
+
+def dashboard_installed():
+    """True if Companion Dashboard's systemd unit was installed by
+    install-dashboard.sh (both variants ship it — presence of the unit
+    file, not the mode, is what gates the toggle)."""
+    return Path(f"/etc/systemd/system/{DASHBOARD_SERVICE}.service").exists()
+
+
+def dashboard_enabled():
+    """True if the Dashboard kiosk display is currently running. Dashboard
+    is independent of the Buttons/Satellite/Companion mode system — it
+    runs alongside whatever mode is active, not instead of it."""
+    return svc_active(DASHBOARD_SERVICE)
+
+
+def set_dashboard_enabled(enable):
+    """Toggle the Dashboard kiosk display on/off. Does not touch
+    switch_mode()/SVC_MAP/Conflicts= — Dashboard has no relationship to
+    the mode system at all."""
+    if enable:
+        run(["systemctl", "enable", "--now", DASHBOARD_SERVICE])
+    else:
+        run(["systemctl", "disable", "--now", DASHBOARD_SERVICE])
 
 
 def switch_mode(new_mode):
@@ -1821,6 +1874,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.html(render_devices(alert=f"✗ restart failed: {esc(err)}", alert_cls="a-err"))
                 return
             self.redir("/devices?ok=restart")
+
+        # ── /dashboard ───────────────────────────────────────────────────────
+        elif path == "/dashboard":
+            if not dashboard_installed():
+                self.html(render_devices(alert="✗ Dashboard is not installed on this image", alert_cls="a-err"))
+                return
+            action = params.get("action", "")
+            set_dashboard_enabled(action == "enable")
+            self.redir("/devices?ok=dashboard")
+
         # ── /mode ────────────────────────────────────────────────────────
         elif path == "/mode":
             new_mode = params.get("new_mode", "").strip()
