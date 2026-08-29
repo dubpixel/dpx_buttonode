@@ -719,6 +719,23 @@ def render_devices(alert="", alert_cls="a-ok"):
     return page(body, "devices", alert, alert_cls)
 
 
+DASHBOARD_RAM_WARN_MB = 1024   # X11 + openbox + Electron kiosk realistically needs
+                               # several hundred MB RSS; below this, expect trouble.
+                               # rockpi-s (466MB total) is the board that prompted this.
+
+
+def total_ram_mb():
+    """Total system RAM in MB, from /proc/meminfo. Returns None if unreadable."""
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) // 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
 def dashboard_section():
     """Companion Dashboard toggle — independent of mode, only shown if
     install-dashboard.sh actually installed the unit on this image."""
@@ -731,6 +748,15 @@ def dashboard_section():
     )
     action = "disable" if on else "enable"
     label  = "⏻ Turn Off" if on else "⏻ Turn On"
+    ram = total_ram_mb()
+    ram_warning = ""
+    if ram is not None and ram < DASHBOARD_RAM_WARN_MB:
+        ram_warning = (
+            f'<p class="note" style="color:#c33">'
+            f'⚠ This board reports {ram}MB RAM — Dashboard\'s X11/Electron kiosk '
+            f'stack usually needs 1GB+ to run reliably alongside a mode service. '
+            f'It may crash-loop or hang on enable. Enable at your own risk.</p>'
+        )
     return f"""
 <div class="sec"><h2>Companion Dashboard</h2>
   <p class="note">
@@ -739,6 +765,7 @@ def dashboard_section():
     Needs an attached HDMI display. Configure which Companion instance it
     points at from its own on-screen settings after enabling.
   </p>
+  {ram_warning}
   <form method="POST" action="/dashboard" style="display:inline">
     <input type="hidden" name="action" value="{action}">
     <button type="submit" class="btn {'btn-w' if on else 'btn-p'}">{label}</button>
