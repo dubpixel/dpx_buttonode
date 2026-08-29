@@ -248,4 +248,22 @@ build {
       "/tmp/install-satellite.sh"
     ]
   }
+
+  # ── Companion Dashboard (opt-in kiosk display) ──────────────────────────────
+  # Runs on BOTH variants — Dashboard is orthogonal to the Buttons/Satellite/
+  # Companion mode system, not gated by `variant`. Installed but not enabled;
+  # the web UI's Devices tab toggle is what starts it (see install-dashboard.sh).
+  provisioner "file" {
+    source      = "scripts/install-dashboard.sh"
+    destination = "/tmp/install-dashboard.sh"
+  }
+
+  provisioner "shell" {
+    execute_command = "chmod +x {{ .Path }}; {{ .Vars }} su root -c {{ .Path }}"
+    inline_shebang  = "/bin/bash -e"
+    inline = [
+      "chmod +x /tmp/install-dashboard.sh",
+      "/tmp/install-dashboard.sh"
+    ]
+  }
 }
