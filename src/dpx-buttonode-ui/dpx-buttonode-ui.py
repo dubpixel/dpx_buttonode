@@ -40,6 +40,15 @@ SATELLITE_API  = "http://localhost:9999"             # satellite REST API
 COMPANION_DIR  = Path("/opt/companion")              # present on full images only
 COMPANION_PORT = 8000                                # companion web UI port
 DASHBOARD_SERVICE = "dpx-dashboard"                  # Companion Dashboard kiosk display
+MODE_COLORS = {"buttons": "#3fb950", "satellite": "#58a6ff", "companion": "#e3b341"}
+
+
+def mode_color_for(mode):
+    return MODE_COLORS.get(mode, "#3fb950")
+
+
+def ram_color_for(pct):
+    return "#f85149" if pct >= 90 else ("#e3b341" if pct >= 70 else "#3fb950")
 
 # ── On-device updates ────────────────────────────────────────────────────────
 GITHUB_API  = "https://api.github.com"
@@ -466,6 +475,8 @@ a{color:#388bfd;text-decoration:none}
 .hdr{background:#161b22;border-bottom:1px solid #30363d;padding:14px 24px;display:flex;align-items:center;gap:10px}
 .hdr h1{font-size:17px;font-weight:700;color:#f0f6ff;letter-spacing:-.3px}
 .tag{background:#1f6feb;color:#fff;font-size:10px;padding:2px 8px;border-radius:12px;font-weight:700;letter-spacing:.3px}
+.statusbar{position:sticky;top:0;z-index:20;background:#0d1117;border-bottom:1px solid #30363d;padding:6px 24px;display:flex;gap:18px;align-items:center;font-family:ui-monospace,monospace;font-size:11px;color:#8b949e;overflow-x:auto;white-space:nowrap}
+.statusbar b{font-weight:700}
 .nav{background:#161b22;border-bottom:1px solid #21262d;padding:0 24px;display:flex;gap:2px;overflow-x:auto}
 .nav a{display:inline-block;padding:10px 14px;font-size:13px;color:#8b949e;border-bottom:2px solid transparent;white-space:nowrap}
 .nav a.on,.nav a:hover{color:#f0f6ff;border-bottom-color:#1f6feb}
@@ -524,14 +535,26 @@ def page(content, tab="status", alert="", alert_cls="a-ok"):
     companion_part = f' &nbsp;&middot;&nbsp; companion {esc(bld["companion_version"])}' if variant_tag == "full" else ""
     footer = (
         f'<div class="footer">'
-        f'dpx-buttonode v{esc(bld["dpx_version"])} [{esc(variant_tag)}]'
-        f' &nbsp;&middot;&nbsp; buttons {esc(bld["buttons_version"])}'
+        f'buttons {esc(bld["buttons_version"])}'
         f' &nbsp;&middot;&nbsp; satellite {esc(bld["satellite_version"])}'
         f'{companion_part}'
         f' &nbsp;&middot;&nbsp; {esc(bld["git_branch"])}@{esc(bld["git_commit"])}'
         f' &nbsp;&middot;&nbsp; built {esc(bld["build_date"])}'
         f'</div>'
     )
+
+    # Persistent status bar — version, mode, RAM — carries through every tab,
+    # not just the Status page. Sticky so it stays visible while scrolling.
+    mode = get_dpx_mode()
+    ram_str, ram_pct = get_ram_usage_human()
+    statusbar = (
+        f'<div class="statusbar">'
+        f'<span><b>v{esc(bld["dpx_version"])}</b> [{esc(variant_tag)}]</span>'
+        f'<span>MODE: <b style="color:{mode_color_for(mode)}">{esc(mode).upper()}</b></span>'
+        f'<span>RAM: <b style="color:{ram_color_for(ram_pct)}">{esc(ram_str)}</b></span>'
+        f'</div>'
+    )
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -543,6 +566,7 @@ def page(content, tab="status", alert="", alert_cls="a-ok"):
 </head>
 <body>
 <div class="hdr"><h1>⯁ {hostname}</h1><span class="tag">dpx-buttonode-ui</span></div>
+{statusbar}
 <nav class="nav">{nav}</nav>
 <div class="wrap">{al}{content}</div>
 {footer}
@@ -600,7 +624,7 @@ def render_status(alert="", alert_cls="a-ok"):
     cs      = svc_active("companion")
     uptime  = esc(get_uptime_human())
     ram_str, ram_pct = get_ram_usage_human()
-    ram_color = "#f85149" if ram_pct >= 90 else ("#e3b341" if ram_pct >= 70 else "#3fb950")
+    ram_color = ram_color_for(ram_pct)
     # Mode card: label + active service indicator + detail line
     if mode == "satellite":
         sat_host, sat_port = get_satellite_config()
@@ -613,7 +637,7 @@ def render_status(alert="", alert_cls="a-ok"):
         mode_detail = ""
         svc_label   = f'<div class="val {"on" if bs else "off"}" style="font-size:13px">buttons {"active" if bs else "inactive"}</div>'
 
-    mode_color = {"buttons": "#3fb950", "satellite": "#58a6ff", "companion": "#e3b341"}.get(mode, "#3fb950")
+    mode_color = mode_color_for(mode)
     mode_card = f"""  <div class="card"><div class="lbl">Mode</div>
     <div class="val" style="font-size:16px;font-weight:700;color:{mode_color}">{mode.upper()}</div>
     {svc_label}
