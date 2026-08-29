@@ -780,8 +780,7 @@ def render_devices(alert="", alert_cls="a-ok"):
     <button type="submit" class="btn btn-w">↺ Restart Buttons</button>
   </form>
   <a href="/" class="btn">Back</a>
-</div>
-{dashboard_section()}"""
+</div>"""
     return page(body, "devices", alert, alert_cls)
 
 
@@ -1550,7 +1549,8 @@ def render_mode(alert="", alert_cls="a-ok"):
     <button type="submit" class="btn btn-p">✓ Save Config</button>
     <a href="/mode" class="btn">Cancel</a>
   </form>
-</div>"""
+</div>
+{dashboard_section()}"""
     return page(body, "mode", alert, alert_cls)
 
 
@@ -1971,11 +1971,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # ── /dashboard ───────────────────────────────────────────────────────
         elif path == "/dashboard":
             if not dashboard_installed():
-                self.html(render_devices(alert="✗ Dashboard is not installed on this image", alert_cls="a-err"))
+                self.html(render_mode(alert="✗ Dashboard is not installed on this image", alert_cls="a-err"))
                 return
             action = params.get("action", "")
             set_dashboard_enabled(action == "enable")
-            self.redir("/devices?ok=dashboard")
+            self.redir("/mode?ok=dashboard")
 
         # ── /mode ────────────────────────────────────────────────────────
         elif path == "/mode":
