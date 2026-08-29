@@ -7,47 +7,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- **Project renamed `buttnode` → `buttonode`** (repo, package, filenames, docs, CI). Full spelling reads
-  cleaner and avoids the Bluetooth ("BT node") misread. GitHub repo rename + remote URL update pending as a
-  separate step.
-- **Default operating mode flipped from Buttons to Companion Satellite.** Most units are meant to sit in a
-  Companion-driven setup out of the box; Buttons is now the opt-in mode via the web UI's Mode tab instead
-  of the default. `install-satellite.sh` now disables `bitfocus-buttons-usb-relay.service` (undoing the
-  Buttons `.deb`'s own postinst auto-enable) and enables `satellite.service` instead; `/etc/dpx-mode`
-  defaults to `satellite`
+---
+
+## [0.7.0] - 2026-08-29
+
+Deck redesign, SSH security overhaul, on-device auto-updates, and a first real
+fresh-flash hardware validation pass — including several real bugs that pass
+only surfaced, none of which a successful build would have caught.
 
 ### Added
-- `update-docs` skill (`.github/skills/update-docs/SKILL.md`) — full documentation audit workflow for dpx_buttonode
-- README: `images/front.png` hardware photo added between hero section and TOC
-- README: UI screenshots grid (`001–006_*.jpe`) replacing placeholder image paths in Usage section
-- README: 📸 Screenshots quick link added next to 3D Case link in hero
-- README: `#dpx-buttonode-ui` section promoted to top-level heading so TOC and Screenshots link anchor correctly
-- README: satisfied `<!--todo-->` comments removed
-- AGENTS.md: `html/` folder added to architecture table for UI preview pages
-- ROADMAP.md: checkboxes added to planned items; Nodes tab marked as shipped
-- `src/dpx-deck-splash/dpx-deck-splash.py` + `scripts/install-deck-splash.sh` (Phase 1) — draws IP + mDNS
-  hostname on the Stream Deck's keys during the boot window before Buttons/Satellite/Companion claims the
-  device. New low-priv `dpx-splash` user, own venv (`streamdeck` + Pillow), `dpx-deck-splash.service` with
-  `Conflicts=bitfocus-buttons-usb-relay.service` for a clean device hand-off. Read-only display only — no
-  keypress handling yet (Phase 2/3 planned: deck-triggered mode switch, DHCP/static toggle).
-  **Hardware-validated 2026-08-24 on a Stream Deck MK.2** — required two live fixes not caught by CI: (1)
-  `streamdeck` needs `libhidapi-libusb0` + a new `/dev/bus/usb/*` udev rule, not `libhidapi-hidraw0` as
-  originally assumed (the library has no hidraw transport at all); (2) hostname now chunks onto keys on
-  word boundaries (`dpx`/`buttonode`/`2199`/`local`) instead of a fixed 6-char slice that broke words
-  mid-word; render_key() now shrinks font size to fit instead of a fixed size
-- `dpx-buttonode-ui.py`: extracted `switch_mode()` out of the inline `/mode` POST handler; added
-  `cycle_mode()`/`toggle_net()` + `--cycle-mode`/`--toggle-net` CLI subcommands — deliberately argument-free
-  so a caller has nothing to smuggle a bad value through
-- **Deck splash Phase 2/3** (code complete, not yet hardware-tested): a third key row (when present) adds
-  MODE and NET action buttons on the deck itself. MODE cycles Buttons → Satellite → Companion (skips
-  Companion if not installed); NET toggles DHCP ↔ last-known-static. Both debounced (2s). Reached via a
-  narrowly-scoped `/etc/sudoers.d/dpx-splash` rule allowing exactly `--cycle-mode`/`--toggle-net`, nothing
-  else — `dpx-deck-splash.py` itself stays unprivileged (`buttons` group only) throughout.
-  `dpx-deck-splash.service` now `Conflicts=` all three mode services, not just Buttons, since Satellite
-  also draws to the deck once connected to a Companion server
-- Deck splash: IP display now shows the web UI port (`:8080`) as a 5th key alongside the 4 octets, when
-  the deck has room — easy to forget the URL needs it otherwise
+- **Deck splash Phase 2/3, hardware-validated:** the boot splash grew into a
+  full stage-then-GO config screen. MODE key cycles Buttons → Satellite →
+  Companion (color-coded, skips Companion if not installed); NET toggles
+  staged DHCP ↔ static; SUBNET cycles `/24 /22 /16 /8`; holding an octet key
+  spins its value (locked unless NET is staged to static); GO commits mode +
+  network together as one combined operation. Reached via a narrowly-scoped
+  `/etc/sudoers.d/dpx-splash` rule (`--apply-mode <value>`/`--toggle-net`/
+  `--pin-static <ip>[/prefix]`) — `dpx-deck-splash.py` itself stays
+  unprivileged (`buttons` group only) throughout.
+- **SSH security overhaul:** SSH ships fully disabled by default (no
+  hardcoded credential at all). `dpx-init-ssh.service` generates a random
+  root password once, on first boot, written group-readable to
+  `/etc/dpx-initial-ssh-password`. The password is **never shown on the web
+  UI** — the only place it's ever revealed is a dedicated key on the deck,
+  which requires a real press of a physical key to reveal (originally
+  hold-to-reveal; changed to press-to-toggle after hardware testing showed
+  a finger covering the key also covered the text it was revealing). The
+  web UI's new SSH tab gates every action (enable/disable/change password)
+  behind the current root password, since the page itself has no login of
+  its own.
+- **On-device auto-update system:** new Updates tab checks all four
+  components (dpx-buttonode software, Buttons, Satellite, Companion)
+  against their real upstream sources and applies updates in place.
+  `dpx-buttonode-ui.py`/`dpx-deck-splash.py` self-update with a
+  validate-then-atomic-swap and a boot-attempt counter that auto-restores
+  the last backup if a bad update crash-loops the service. Buttons updates
+  via the mirrored `.deb`. Satellite/Companion update via new slim
+  `scripts/update-satellite.sh`/`update-companion.sh` (not the install
+  scripts, which force-switch the active mode) run as detached background
+  jobs with progress the Updates tab polls.
+- **Docker test infrastructure** (`test/docker/`): Companion and Buttons
+  containers deployable to a shared dev droplet, isolated from other
+  projects on the same box. Lets Satellite mode be tested against a real
+  Companion instance without a second physical unit or a full-variant
+  build; the Buttons container regression-tests the `.deb` install/update
+  mechanism (not real HID behavior, which needs actual hardware).
+- `FIRST-BOOT-TEST-PLAN.md` — a running checklist of everything that needs
+  re-verifying on a genuinely blank flash, since day-to-day iteration
+  happens on one hand-patched unit whose first-boot-only logic never gets
+  naturally re-exercised.
+- `update-docs` skill (`.github/skills/update-docs/SKILL.md`) — full
+  documentation audit workflow for dpx_buttonode
+- README: hardware photo, UI screenshots grid, screenshots quick link
+
+### Changed
+- **Project renamed `buttnode` → `buttonode`** (repo, package, filenames,
+  docs, CI, GitHub repo/remote).
+- **Default operating mode flipped from Buttons to Companion Satellite** —
+  most units are meant to sit in a Companion-driven setup out of the box.
+- **Companion now installs before Satellite** in the Packer build (was the
+  reverse) — see Fixed.
+- Deck splash: IP display now shows the web UI port (`:8080`) as a 5th key
+  alongside the 4 octets, when the deck has room.
+
+### Fixed
+- **SSH wasn't actually disabled.** Found live on a genuinely fresh flash:
+  disabling only `ssh.service` left SSH fully reachable the entire time,
+  because Ubuntu ships `ssh.socket` enabled alongside it — socket
+  activation means systemd listens on `:22` and lazily starts `ssh.service`
+  on the first connection attempt regardless of the service's own state.
+  `systemctl is-enabled ssh` said "disabled" throughout; it was never true.
+  Same gap existed in the web UI's SSH tab toggle. Fixed in both the
+  Packer provisioning and `dpx-buttonode-ui.py`.
+- **Companion silently broke Satellite on every full-variant build.**
+  `companion-pi`'s official installer unconditionally purges the shared
+  `/opt/fnm` Node runtime as a cleanup step, but Satellite's systemd unit
+  still depends on it — and Satellite installed *before* Companion in the
+  old provisioning order, so Companion's install always wiped out what
+  Satellite had just set up. Fixed by swapping the install order.
+- **GO silently did nothing if the selected mode's service had already
+  died.** `/etc/dpx-mode` staying e.g. `companion` after a crash doesn't
+  mean `companion.service` is actually running, but the mode-switch logic
+  only checked whether the *string* had changed — found live after a
+  crash left the persisted mode unchanged but the service dead, with no
+  way to relaunch it from the web UI or the deck. Fixed at the source
+  (`switch_mode()`), so it now also checks whether the service is
+  actually active.
+- **Stream Deck `/dev/hidraw*` node going missing after mode-switch
+  churn** — invisible to libusb-based consumers (Satellite, the deck
+  splash itself) but fatal to Companion's hidraw-only surface driver.
+  Fixed with a gentle `udevadm trigger` step, tried before the disruptive
+  unbind/bind fallback (which previously needed a physical replug in some
+  cases) — now baked into every mode switch automatically, not just
+  triggered manually after the fact.
+- **Companion's update check queried a repo with zero releases,** always
+  silently reporting "unknown." Companion's real release source is a
+  Bitfocus-hosted API, not GitHub Releases — `bitfocus/companion-pi` (the
+  repo `install-companion.sh` downloads its *installer* from) has never
+  published a GitHub release itself.
+- `dpx-init-ssh.sh` SIGPIPE-under-`pipefail` crash and a `tr` locale bug
+  that could corrupt the generated password.
+- Deck splash Phase 1 (boot-window IP/hostname display) required two
+  earlier live fixes not caught by CI: the `streamdeck` library needs
+  `libhidapi-libusb0` + a `/dev/bus/usb/*` udev rule, not
+  `libhidapi-hidraw0` as originally assumed (no hidraw transport exists
+  at all); hostname now chunks onto keys on word boundaries
+  (`dpx`/`buttonode`/`2199`/`local`) instead of a fixed-length slice that
+  broke words mid-word.
 
 ---
 

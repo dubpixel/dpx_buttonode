@@ -6,34 +6,40 @@ This document provides operational directives for AI coding assistants (GitHub C
 
 ## PROJECT: dpx-buttonode
 
-**Status:** two stacked, unmerged branches — rename+variant work built and draft-released but not hardware-validated; new Stream Deck HID splash feature in progress on top of it  
-**Branch:** `feature/deck-hid-splash` (branched off `refactor/rename-dpx-buttonode` @ `30be61b`)  
-**Version File:** `VERSION` (0.6.0)
+**Status:** `feature/deck-hid-splash` carries everything — the rename, the Full/Lite
+Companion variant system, the deck HID splash feature (all 3 phases,
+hardware-validated), the SSH security overhaul, and the on-device
+auto-update system. Not yet merged to `main`. Draft/prerelease test builds
+only so far; see `FIRST-BOOT-TEST-PLAN.md` for the checklist a real fresh
+flash needs before this is release-ready.  
+**Branch:** `feature/deck-hid-splash`  
+**Version File:** `VERSION` (0.7.0)
 
-**Branch stack (oldest → newest):**
-- `main` — **stale.** Predates both the `dpx_buttnode`→`dpx_buttonode` rename and the entire v0.6.0 Full/Lite Companion variant system. Do not branch new work off `main` until `refactor/rename-dpx-buttonode` merges into it.
-- `refactor/rename-dpx-buttonode` — full project rename (`buttnode`→`buttonode`, repo/folder/GitHub renamed to match) + the v0.6.0 Full/Lite Companion variant work it was built on top of. Both Lite and Full images rebuilt clean in CI post-rename and posted as draft prereleases (`rename-test-lite`, `rename-test-full`) — **not yet hardware-validated.** Not merged to `main`.
-- `feature/deck-hid-splash` — current work, branched off the rename branch (not off stale `main`) since it only depends on file layout/service names that are already correct there; independent of whether Full Companion mode itself has been hardware-tested. See "Handoff (2026-08-21/22)" below.
-
-### Handoff (2026-08-21 / 2026-08-22)
-
-**What was done this session (Copilot → Claude CLI handoff continuation):**
-
-- Full project rename `dpx_buttnode` → `dpx_buttonode`: 296 case-insensitive occurrences across 26 files, 8 files/1 dir renamed, GitHub repo renamed (`gh repo rename`), local folder renamed to match. Committed on `refactor/rename-dpx-buttonode`.
-- Rebuilt both variants post-rename in CI (`armbian-builder.yaml`, board=rockpi-s): `variant=full` and `variant=lite`, both green. Posted as draft/prerelease with untested checklists: `rename-test-lite`, `rename-test-full`.
-- Recovered the pre-Claude-Code build history from GitHub Copilot Chat's local VS Code storage (undocumented patch-log format — see `VSCODE-CHAT-RECOVERY.md` for the recovery methodology, reusable for other workspaces). Raw log at `_chat-history/copilot-chat-log.md` (gitignored).
-- Started **Stream Deck HID boot splash** feature (Phase 1 of 3, see plan below) on `feature/deck-hid-splash`:
-  - New `src/dpx-deck-splash/dpx-deck-splash.py` + `scripts/install-deck-splash.sh` + `dpx-buttonode.pkr.hcl` wiring — draws IP + mDNS hostname on the deck's keys during the boot window before Buttons/Satellite/Companion claims the device. Own venv (`streamdeck` + `Pillow`), separate from the stdlib-only config UI. Runs as new low-priv `dpx-splash` user (`buttons` group only). New `dpx-deck-splash.service`, `Conflicts=bitfocus-buttons-usb-relay.service` for clean hand-off.
-  - Extracted `switch_mode()` out of the UI's inline `/mode` POST handler; added `--apply-mode`/`--apply-net` CLI subcommands to `dpx-buttonode-ui.py` — groundwork for Phase 2/3 (deck-triggered mode switch + DHCP/static toggle via a scoped sudoers rule), no new privilege surface added yet.
-  - **Not yet done:** Phase 1 hasn't been hardware-tested (no real Stream Deck HID protocol testing possible without hardware). Phase 2 (mode-switch keypress) and Phase 3 (DHCP/static keypress) not started.
+**Branch stack:**
+- `main` — **stale.** Predates the `dpx_buttnode`→`dpx_buttonode` rename
+  and everything since. Do not branch new work off `main`.
+- `refactor/rename-dpx-buttonode` — superseded. The rename it did landed
+  on `feature/deck-hid-splash` too; this branch itself is no longer where
+  active work happens.
+- `feature/deck-hid-splash` — **the active branch.** Contains the rename,
+  the v0.6.0 Full/Lite Companion variant system, and everything documented
+  in `CHANGELOG.md`'s `[0.7.0]` entry. This is what gets built/tested/
+  eventually merged.
 
 **Immediate next steps:**
-1. Flash `rename-test-lite`/`rename-test-full` and run the checklists in their release notes; merge `refactor/rename-dpx-buttonode` → `main` once validated.
-2. Hardware-test the Phase 1 deck splash (boot with a deck attached, confirm IP/hostname render correctly and the service yields cleanly to Buttons — see `journalctl -u dpx-deck-splash -u bitfocus-buttons-usb-relay`).
-3. Phase 2/3 of the deck splash feature once Phase 1 is validated (see plan file referenced in git history / ask for a recap — one PR per phase against `feature/deck-hid-splash`).
+1. Build a fresh full-variant image from current `feature/deck-hid-splash`
+   HEAD and walk `FIRST-BOOT-TEST-PLAN.md` on a genuinely blank flash —
+   several real bugs were found and fixed live during 2026-08-28/29
+   hardware testing (see CHANGELOG `[0.7.0]` Fixed section) that were
+   never themselves present in the image actually tested that day.
+2. Merge to `main` once a fresh-flash pass comes back clean.
 
-**Open issues to address after the rename branch merges:**
-- Issue #4: make Full variant opt-in on automated releases (`build-full` boolean input on `release-action.yaml` so cron only builds Lite)
+**Open issues:**
+- Issue #4: make Full variant opt-in on automated releases (`build-full`
+  boolean input on `release-action.yaml` so cron only builds Lite)
+- Issue #5: optional Companion Dashboard integration (scoping only)
+- Issue #6: cross-platform (Armbian board matrix + separate Raspberry Pi
+  OS path) support (scoping only)
 
 ---
 
