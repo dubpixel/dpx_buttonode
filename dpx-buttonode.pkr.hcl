@@ -145,8 +145,27 @@ build {
       # ssh.socket enabled alongside ssh.service; socket activation means
       # systemd listens on :22 and lazily starts ssh.service on the first
       # connection attempt regardless of the service's own state.
-      "systemctl disable --now ssh.socket || true",
-      "systemctl disable --now ssh.service || true",
+      #
+      # No --now here (see gotcha #18) — it's meaningless at image-build
+      # time (nothing is running in the chroot) and Raspberry Pi OS
+      # Trixie's newer systemd hard-refuses it, unlike Armbian's older
+      # systemd which silently no-ops it. Plain disable removes the
+      # enable symlink, which is all that's needed.
+      "systemctl disable ssh.socket || true",
+      "systemctl disable ssh.service || true",
+
+      # Raspberry Pi OS ships a placeholder UID-1000 user and a
+      # userconfig.service that interactively prompts "Which user would
+      # you like to rename:" on /dev/tty8 on every boot unless
+      # /boot/firmware/userconf.txt is pre-seeded -- confirmed live
+      # 2026-08-29 on real Pi 4 hardware (see dpx_openPanel issue #25 for
+      # the same class of problem in a sibling project). This project's
+      # security model is root-only SSH with no baked-in credential (see
+      # the SSH block above) -- we don't want or need this separate
+      # non-root account/wizard at all, so mask it outright rather than
+      # fake a userconf.txt. No-op (but harmless) on Armbian, which
+      # doesn't ship this unit.
+      "systemctl mask userconfig.service || true",
 
       # Write build metadata — readable by dpx-buttonode-ui Status page
       "echo 'DPX_VERSION=${var.dpx_version}' > /etc/dpx-buttonode-release",
