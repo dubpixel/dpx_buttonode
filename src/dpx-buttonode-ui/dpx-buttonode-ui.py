@@ -811,6 +811,16 @@ def switch_mode(new_mode):
     run(["systemctl", "stop",    old_svc])
     run(["systemctl", "disable", old_svc])
     run(["systemctl", "enable",  new_svc])
+    # Nudge udev before handing the deck to any HID-consuming mode.
+    # Confirmed live 2026-08-29: heavy mode-switch churn can leave the
+    # kernel holding the Stream Deck bound but with its /dev/hidraw* node
+    # missing -- invisible to libusb-based consumers (Satellite, this
+    # process itself) but fatal to Companion's hidraw-only surface
+    # driver. Previously only fixed by manually hitting /power-cycle-deck
+    # after the fact; baking it into every switch means it's already
+    # fixed by the time the new mode's service starts, not something
+    # that has to be noticed and triggered separately.
+    udev_retrigger()
     _, err, rc = run(["systemctl", "start", new_svc])
     if rc != 0:
         return False, f"Failed to start {new_svc}: {err}"
