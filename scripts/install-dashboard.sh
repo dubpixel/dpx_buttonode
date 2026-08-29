@@ -74,11 +74,23 @@ chmod +x "$DASH_HOME/.xinitrc"
 chown -R dpx-dashboard:dpx-dashboard "$DASH_HOME"
 
 # ── systemd unit ─────────────────────────────────────────────────────────────
-# Adapted directly from companion-dashboard's own known-working
-# install-linux-server-systemd.sh unit. Installed but NOT enabled/started —
-# this is an opt-in toggle (dpx-buttonode-ui Devices tab), not auto-start
-# on boot like their own default. Getty-autologin block skipped entirely:
-# the unit launches X directly on tty7 itself, no need to touch tty1.
+# Adapted from companion-dashboard's own install-linux-server-systemd.sh
+# unit, but runs as User=root, not User=dpx-dashboard, and drops
+# StandardInput=tty/TTYPath/TTYReset/TTYVHangup entirely. A sibling project
+# (dpx_openPanel, same Pi 4 kiosk problem, issue #6) hit this exact
+# combination crash-looping with "xf86OpenConsole: Cannot open virtual
+# console 1 (Permission denied)" -- a systemd User= service does not get a
+# real logind session for VT access, so X can't open the console under a
+# non-root user without a PAM-managed login session (which TTYPath alone
+# doesn't provide). Root has console access outright, sidestepping the
+# whole problem -- confirmed fix in that project. `--no-sandbox` is
+# already required for Chromium/Electron as root (also confirmed there),
+# and is already in the .xinitrc's exec line above.
+#
+# Installed but NOT enabled/started -- this is an opt-in toggle
+# (dpx-buttonode-ui Devices tab), not auto-start on boot like their own
+# default. Getty-autologin block skipped entirely: the unit launches X
+# directly on tty7 itself, no need to touch tty1.
 cat > /etc/systemd/system/dpx-dashboard.service << 'UNIT'
 [Unit]
 Description=Companion Dashboard Display Service
@@ -87,17 +99,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=dpx-dashboard
+User=root
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/dpx-dashboard/.Xauthority
 ExecStartPre=/bin/sleep 5
 ExecStart=/usr/bin/xinit /home/dpx-dashboard/.xinitrc -- /usr/bin/X :0 vt7 -nolisten tcp -noreset
 Restart=on-failure
 RestartSec=10
-StandardInput=tty
-TTYPath=/dev/tty7
-TTYReset=yes
-TTYVHangup=yes
 StandardOutput=journal
 StandardError=journal
 
