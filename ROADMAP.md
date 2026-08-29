@@ -23,7 +23,7 @@ No external libraries needed. A pure-JS QR generator (e.g. `qrcode.js` inlined) 
 ---
 
 ### Stream Deck HID Boot Splash
-**Status:** Phase 1 hardware-validated (2026-08-24, Stream Deck MK.2); Phase 2/3 code complete, not yet hardware-tested `- [x]` Phase 1 / `- [x]` Phase 2 code / `- [x]` Phase 3 code / `- [ ]` Phase 2/3 hardware test
+**Status:** hardware-validated end to end (Phase 1: 2026-08-24; Phase 2/3: 2026-08-28/29, Stream Deck MK.2 + Original 15-key) `- [x]` Phase 1 / `- [x]` Phase 2/3 code / `- [x]` Phase 2/3 hardware test
 
 Draw device status directly onto the attached Stream Deck's keys via HID, instead of requiring SSH or the
 web UI to find a fresh unit on the network.
@@ -33,17 +33,21 @@ web UI to find a fresh unit on the network.
   low-priv `dpx-splash` user (`buttons` group only). Required two hardware-only fixes CI couldn't catch:
   the `streamdeck` library needs `libhidapi-libusb0` + a `/dev/bus/usb/*` udev rule, not hidraw; hostname
   now chunks onto keys on word boundaries instead of a fixed character count.
-- **Phase 2/3** (code complete, pending hardware test): a third key row (when present) adds MODE and NET
-  action buttons — MODE cycles Buttons → Satellite → Companion (skipping Companion if not installed), NET
-  toggles DHCP ↔ last-known-static, both debounced. The splash process stays unprivileged (`buttons` group
-  only) and reaches system state through exactly two fixed, argument-free commands
-  (`dpx-buttonode-ui.py --cycle-mode` / `--toggle-net`) via a narrowly-scoped `/etc/sudoers.d/dpx-splash`
-  rule — no argument value for a bug or compromise to smuggle through.
-  `dpx-deck-splash.service` now `Conflicts=` all three mode services (not just Buttons), since Satellite
-  itself draws to the deck once connected to a Companion server. **Known limitation:** the MODE/NET keys
-  only work while the splash service is actually running — i.e. in Satellite or Companion mode. Buttons
-  mode conflicts with the splash service by design, so switching *out of* Buttons still needs the web UI
-  or SSH.
+- **Phase 2/3** (hardware-validated): a stage-then-GO config screen. MODE key cycles the *pending* selection
+  through Buttons → Satellite → Companion (color-coded, skips Companion if not installed); NET toggles
+  staged DHCP ↔ static; SUBNET cycles `/24 /22 /16 /8`; holding an octet key spins its value (locked unless
+  NET is staged to static); GO commits mode + network together as one operation. Reached through
+  `dpx-buttonode-ui.py --apply-mode <value>` / `--toggle-net` / `--pin-static <ip>[/prefix]` via a
+  narrowly-scoped `/etc/sudoers.d/dpx-splash` rule.
+  `dpx-deck-splash.service` `Conflicts=` all three mode services (not just Buttons), since Satellite and
+  Companion both draw to the deck themselves once active. **Known limitation:** the config screen only
+  shows while the splash service is actually running — before any mode has claimed the device. Switching
+  *out of* an active mode still needs the web UI or SSH; switching *into* a different mode from the config
+  screen (before one is active) works via MODE+GO.
+  Two real bugs found and fixed during hardware validation: GO silently no-op'd if the selected mode's
+  service had died while the persisted mode string stayed unchanged (fixed by checking actual service
+  liveness, not just the string); the SSH key's original hold-to-reveal design turned out impractical in
+  practice (a finger on the key covers the text it's revealing) — changed to press-to-toggle.
 
 ### Network Discovery Page
 **Status:** partially done — Nodes tab shipped in v0.5.0 (LAN discovery via web UI); full server-side subnet scan still `- [ ]`
@@ -54,13 +58,15 @@ From any buttonode's web UI, show all other buttonodes visible on the local netw
 
 ## General
 
-- [x] code / [ ] hardware test — **Security: SSH exposure, fixed 2026-08-25.** Was: every image shipped SSH
-  enabled with the hardcoded root password `1234`, unrotated per build. Now: SSH ships **disabled**, no
-  hardcoded credential; `dpx-init-ssh.service` generates a random per-device password on first boot, shown
-  on the web UI's new **SSH** tab and on the deck splash screen until changed; every SSH-tab action requires
-  the current root password (the web UI itself has no login, so this is load-bearing, not decorative). See
-  README's SSH section and AGENTS.md gotcha #10a for the full design. Not yet validated on real hardware —
-  first-boot generation, the deck's password key, and the web UI flow all still need a real test.
+- [x] code / [x] hardware test — **Security: SSH exposure, fixed 2026-08-25, hardware-validated
+  2026-08-28/29.** Was: every image shipped SSH enabled with the hardcoded root password `1234`, unrotated
+  per build. Now: SSH ships **disabled**, no hardcoded credential; `dpx-init-ssh.service` generates a
+  random per-device password on first boot, revealed only via press-to-toggle on the deck splash's SSH key
+  (never shown on the web UI); every SSH-tab action requires the current root password. See README's SSH
+  section and AGENTS.md gotcha #10a for the full design. Hardware testing on a genuinely fresh flash found
+  a real gap the code review hadn't caught: disabling only `ssh.service` left SSH fully reachable the
+  entire time via Ubuntu's `ssh.socket` (socket activation starts `ssh.service` on demand regardless of its
+  own disabled state) — fixed in both the Packer provisioning and the web UI's toggle.
 - [ ] First-boot wizard (hostname confirmation, mode selection: Buttons vs Satellite)
 - [ ] `/status` JSON endpoint for scripting/monitoring
 - [ ] Make `full` variant opt-in on automated releases — add `build-full` boolean input to `release-action.yaml` so the full image is only built when explicitly requested, not on every Buttons version bump (currently doubles CI time)
@@ -69,7 +75,10 @@ From any buttonode's web UI, show all other buttonodes visible on the local netw
 
 ## On-Device Auto-Update
 
-**Status:** code complete, not yet hardware-tested `- [x]` code / `- [ ]` hardware test
+**Status:** code complete; Updates tab check verified on real hardware 2026-08-29 (found and fixed a real
+bug — Companion's check queried a GitHub repo with zero releases, always reported "unknown"; real source is
+a Bitfocus-hosted API). Apply paths and the crash-recovery drill not yet exercised on hardware. `- [x]` code
+/ `- [x]` check hardware-tested / `- [ ]` apply + crash-recovery hardware test
 
 When the unit can see the internet, offer to update itself in-place. No custom server needed — the GitHub Releases API is the source of truth. No full image re-flash (not feasible OTA) — updates target only the Python UI file initially.
 
