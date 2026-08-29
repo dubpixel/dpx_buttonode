@@ -167,6 +167,22 @@ build {
       # doesn't ship this unit.
       "systemctl mask userconfig.service || true",
 
+      # Raspberry Pi OS ships cloud-init by default (it's the actual
+      # mechanism behind Raspberry Pi Imager's "advanced options"
+      # customization on current releases). With no datasource/config
+      # provided, it searches before giving up on its own timeout --
+      # confirmed live 2026-08-29, boot visibly stalled at "Reached
+      # target Cloud-init target" on real Pi 4 hardware. This project's
+      # own first-boot provisioning (dpx-set-hostname, dpx-init-ssh, etc.)
+      # already covers everything cloud-init would otherwise be used for
+      # here, so disable it outright via its own documented marker file
+      # rather than let it search-and-timeout on every boot. Also mask
+      # the units directly as a second layer -- harmless if redundant.
+      # No-op (but harmless) on Armbian, which may not ship cloud-init
+      # depending on board/image.
+      "mkdir -p /etc/cloud && touch /etc/cloud/cloud-init.disabled || true",
+      "systemctl mask cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service cloud-init.target || true",
+
       # Write build metadata — readable by dpx-buttonode-ui Status page
       "echo 'DPX_VERSION=${var.dpx_version}' > /etc/dpx-buttonode-release",
       "echo 'BUTTONS_VERSION=${var.build}' >> /etc/dpx-buttonode-release",
