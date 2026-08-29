@@ -1,0 +1,175 @@
+name: Build Raspberry Pi OS + dpx-buttonode Image
+
+# Real Raspberry Pi hardware gets real Raspberry Pi OS, not Armbian --
+# Armbian's Pi support is secondary to boards it's actually built for
+# (Rockchip/Allwinner/Amlogic). This workflow downloads the official
+# Raspberry Pi OS Lite (64-bit) image directly from Raspberry Pi's own
+# release manifest (the same one Raspberry Pi Imager uses) and hands it to
+# the exact same dpx-buttonode.pkr.hcl the Armbian pipeline uses --
+# unmodified. The Packer arm-image plugin's source just takes a raw .img
+# via `var.url`; it does not care whether that image came from Armbian's
+# build framework or an official Raspberry Pi OS release.
+#
+# One universal 64-bit image covers Pi 4 and Pi 5 (and other 64-bit-capable
+# Pi models) -- no per-board compile step like Armbian needs, so there's no
+# board dropdown here.
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: 'Image variant'
+        required: false
+        default: 'lite'
+        type: choice
+        options:
+          - lite
+          - full
+  workflow_call:
+    inputs:
+      variant:
+        description: "Image variant: 'lite' or 'full'"
+        required: false
+        default: 'lite'
+        type: string
+    outputs:
+      artifact-name:
+        description: 'Name of the uploaded artifact'
+        value: ${{ jobs.build.outputs.artifact-name }}
+      buttons-version:
+        description: 'Buttons version installed in this image'
+        value: ${{ jobs.build.outputs.buttons-version }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      artifact-name: ${{ steps.meta.outputs.artifact-name }}
+      buttons-version: ${{ steps.meta.outputs.buttons-version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ARM emulation is required to chroot into the ARM64 image, same as
+      # the Armbian pipeline -- unrelated to which OS built the base image.
+      - name: Install QEMU user-static
+        run: sudo apt-get update -q && sudo apt-get install -y qemu-user-static
+
+      # ── Download Bitfocus Buttons package from mirror ──────────────────────
+      - name: Download Buttons USB Relay package from mirror
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACTS_DIR: artifacts
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash scripts/download-buttons.sh
+
+      - name: Read version and set metadata
+        id: meta
+        run: |
+          VERSION=$(cat artifacts/buttons-version.txt)
+          BUILD_VERSION=$(cat VERSION)
+          BOARD="rpi"
+          RAW_BRANCH="${{ github.ref_name }}"
+          BRANCH_SLUG=$(echo "$RAW_BRANCH" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9._-]|-|g')
+          COMMIT=$(echo "${{ github.sha }}" | cut -c1-7)
+          VARIANT="${{ inputs.variant || 'lite' }}"
+          if [ "$RAW_BRANCH" = "main" ]; then
+            ARTIFACT_NAME="${BOARD}-dpx-buttonode-${BUILD_VERSION}-${VARIANT}-${COMMIT}"
+          else
+            ARTIFACT_NAME="${BOARD}-dpx-buttonode-${BUILD_VERSION}-${VARIANT}-${BRANCH_SLUG}-${COMMIT}"
+          fi
+          echo "buttons-version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Board   : ${BOARD} (Raspberry Pi OS, 64-bit -- covers Pi 4/5)"
+          echo "Version : ${VERSION}"
+          echo "Build   : ${BUILD_VERSION}"
+          echo "Branch  : ${RAW_BRANCH} → ${BRANCH_SLUG}"
+          echo "Commit  : ${COMMIT}"
+          echo "Artifact: ${ARTIFACT_NAME}"
+
+      # ── Fetch base Raspberry Pi OS image ────────────────────────────────────
+      - name: Download official Raspberry Pi OS Lite (64-bit) image
+        run: |
+          set -euo pipefail
+          echo "==> Resolving current release from Raspberry Pi's own image manifest"
+          IMG_URL=$(curl -fsSL "https://downloads.raspberrypi.org/os_list_imagingutility_v4.json" \
+            | jq -r '.. | objects | select(.name? == "Raspberry Pi OS Lite (64-bit)") | .url' | head -1)
+          if [ -z "$IMG_URL" ]; then
+            echo "ERROR: could not find 'Raspberry Pi OS Lite (64-bit)' in the manifest" >&2
+            exit 1
+          fi
+          echo "Resolved: $IMG_URL"
+          mkdir -p build/output/images
+          curl -fsSL -o build/output/images/raspios.img.xz "$IMG_URL"
+          echo "==> Decompressing"
+          xz -d build/output/images/raspios.img.xz
+          ls -lh build/output/images/raspios.img
+
+      # ── Customize image with Packer (identical to the Armbian pipeline) ────
+      - name: Install Packer
+        run: |
+          wget -qO - https://apt.releases.hashicorp.com/gpg \
+            | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+            https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
+            | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt-get update -q && sudo apt-get install -y packer
+
+      - name: Initialize Packer plugins
+        env:
+          PACKER_GITHUB_API_TOKEN: ${{ github.token }}
+        run: sudo --preserve-env=PACKER_GITHUB_API_TOKEN packer init dpx-buttonode.pkr.hcl
+
+      - name: Build customized image with Packer
+        run: |
+          sudo packer build \
+            -var "url=build/output/images/raspios.img" \
+            -var "build=$(cat artifacts/buttons-version.txt)" \
+            -var "deb_path=artifacts/bitfocus-buttons-usb-relay-headless.deb" \
+            -var "dpx_version=$(cat VERSION)" \
+            -var "git_branch=${{ github.ref_name }}" \
+            -var "git_commit=$(echo '${{ github.sha }}' | cut -c1-7)" \
+            -var "build_date=$(date -u +%Y-%m-%d)" \
+            -var "variant=${{ inputs.variant || 'lite' }}" \
+            dpx-buttonode.pkr.hcl
+
+      # ── Compress and upload ────────────────────────────────────────────────
+      - name: Install zerofree
+        run: sudo apt-get install -y zerofree
+
+      - name: Zero free space and compress image
+        run: |
+          IMG="output-dpx-buttonode/armbian-dpx-buttonode.img"
+          VERSION=$(cat artifacts/buttons-version.txt)
+          BUILD_VERSION=$(cat VERSION)
+          BOARD="rpi"
+          RAW_BRANCH="${{ github.ref_name }}"
+          BRANCH_SLUG=$(echo "$RAW_BRANCH" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9._-]|-|g')
+          COMMIT=$(echo "${{ github.sha }}" | cut -c1-7)
+          VARIANT="${{ inputs.variant || 'lite' }}"
+          if [ "$RAW_BRANCH" = "main" ]; then
+            FINAL_NAME="${BOARD}-dpx-buttonode-${BUILD_VERSION}-${VARIANT}-${COMMIT}.img"
+          else
+            FINAL_NAME="${BOARD}-dpx-buttonode-${BUILD_VERSION}-${VARIANT}-${BRANCH_SLUG}-${COMMIT}.img"
+          fi
+
+          LOOP=$(sudo losetup -fP --show "$IMG")
+          ROOT_PART="${LOOP}p2"
+          sudo e2fsck -fy "$ROOT_PART" || true
+          sudo zerofree "$ROOT_PART"
+          sudo losetup -d "$LOOP"
+
+          sudo mv "$IMG" "$FINAL_NAME"
+          sudo gzip -n "$FINAL_NAME"
+          sudo chown runner:runner "${FINAL_NAME}.gz"
+          echo "COMPRESSED_IMAGE=${FINAL_NAME}.gz" >> "$GITHUB_ENV"
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact-name }}
+          path: ${{ env.COMPRESSED_IMAGE }}
+          retention-days: 3
+          if-no-files-found: error
