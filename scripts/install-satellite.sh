@@ -44,7 +44,14 @@ echo "==> update-satellite.sh installed to /usr/local/bin"
 # bitfocus-buttons-usb-relay.service — undo that here since this script
 # runs after install-buttons.sh and is where the real default gets decided.
 # dpx-buttonode-ui Mode tab handles enable/disable at runtime either way.
-systemctl disable --now bitfocus-buttons-usb-relay
+# --now (stop) is meaningless during image build (nothing is actually
+# running in the chroot) and newer systemd (Raspberry Pi OS Trixie) hard-
+# refuses --now with no PID 1 running, unlike Armbian's older systemd which
+# silently no-ops it -- confirmed live 2026-08-29, killed the whole Packer
+# build with exit 1. Plain disable is all that's needed: it just removes
+# the enable symlink so the .deb's postinst auto-start doesn't survive
+# into the shipped image.
+systemctl disable bitfocus-buttons-usb-relay
 systemctl enable satellite
 echo "==> satellite.service: enabled (default mode)"
 echo "==> bitfocus-buttons-usb-relay.service: disabled (opt-in via Mode tab)"
