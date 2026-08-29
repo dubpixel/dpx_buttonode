@@ -162,6 +162,34 @@ def companion_installed():
     return COMPANION_DIR.exists()
 
 
+MODE_SERVICE = {
+    "buttons": "bitfocus-buttons-usb-relay",
+    "satellite": "satellite",
+    "companion": "companion",
+}
+
+
+def mode_service_active(mode):
+    """Read-only systemd status query — no sudo needed, any user can ask
+    systemd whether a unit is active. Doesn't cross the privilege
+    boundary described above: only run_privileged() (sudo-gated) ever
+    changes anything, this just asks a question. Exists because
+    /etc/dpx-mode staying "companion" after e.g. a crash doesn't mean
+    companion.service is actually running — confirmed live 2026-08-29:
+    the persisted mode survived a reboot but the service didn't come
+    back, and GO's mode-changed check alone (comparing against
+    /etc/dpx-mode) saw "nothing to do" and silently no-opped."""
+    svc = MODE_SERVICE.get(mode)
+    if not svc:
+        return False
+    try:
+        return subprocess.run(
+            ["systemctl", "is-active", "--quiet", svc]
+        ).returncode == 0
+    except Exception:
+        return False
+
+
 def get_current_mode():
     try:
         return MODE_FILE.read_text().strip()
@@ -439,7 +467,12 @@ def execute_staged(deck, key, state):
     """
     try:
         current_mode = get_current_mode()
-        if state["mode_pending"] != current_mode:
+        mode_changed = state["mode_pending"] != current_mode
+        # Also re-apply if the persisted mode's own service isn't
+        # actually running — e.g. it crashed and /etc/dpx-mode never
+        # changed, so mode_changed alone would wrongly see nothing to do.
+        mode_dead = not mode_changed and not mode_service_active(state["mode_pending"])
+        if mode_changed or mode_dead:
             run_privileged(["--apply-mode", state["mode_pending"]])
 
         if state["net_pending"] == "static":

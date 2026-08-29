@@ -786,8 +786,6 @@ def switch_mode(new_mode):
     if new_mode == "companion" and not companion_installed():
         return False, "Full Companion not installed — flash the Full image variant"
     current = get_dpx_mode()
-    if new_mode == current:
-        return True, f"Already in {new_mode} mode"
     SVC_MAP = {
         "buttons":   "bitfocus-buttons-usb-relay",
         "satellite": "satellite",
@@ -795,6 +793,16 @@ def switch_mode(new_mode):
     }
     old_svc = SVC_MAP.get(current, "bitfocus-buttons-usb-relay")
     new_svc = SVC_MAP[new_mode]
+    if new_mode == current:
+        # The persisted mode alone doesn't guarantee its service is
+        # actually running -- confirmed live 2026-08-29: a crash (or a
+        # reboot after one) can leave MODE_FILE saying e.g. "companion"
+        # while companion.service is dead. Blindly no-opping here meant
+        # there was no way to relaunch it -- not from the web UI, and not
+        # from the deck's GO key, since both funnel through this
+        # function. Only skip if it's genuinely already up.
+        if svc_active(new_svc):
+            return True, f"Already in {new_mode} mode"
     # If switching TO satellite, stage the config before starting
     if new_mode == "satellite":
         host, port = get_satellite_config()
