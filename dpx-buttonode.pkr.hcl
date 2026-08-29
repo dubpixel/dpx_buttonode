@@ -53,13 +53,28 @@ variable "variant" {
   description = "Image variant: 'lite' (Buttons + Satellite) or 'full' (+ full Companion)"
 }
 
+variable "image_mounts" {
+  type    = list(string)
+  default = ["/"]
+  description = <<-EOT
+    Mount points, one per partition, in partition-index order (partition 1
+    first). Armbian's single-partition images use the default ["/"].
+    Raspberry Pi OS ships two partitions (boot, then root) and needs
+    ["/boot", "/"] -- the arm-image Packer plugin hard-requires
+    len(partitions) == len(image_mounts) (pkg/builder/step_mount_image.go),
+    so this must match the actual source image's partition count exactly
+    or the build fails with "different of partitions than expected".
+    Confirmed live 2026-08-29 building against a real Raspberry Pi OS image.
+  EOT
+}
+
 source "arm-image" "armbian" {
   iso_checksum      = "none"
   iso_url           = var.url
   target_image_size = var.variant == "full" ? 8000000000 : 5000000000
   output_filename   = "output-dpx-buttonode/armbian-dpx-buttonode.img"
   qemu_binary     = "qemu-aarch64-static"
-  image_mounts    = ["/"]
+  image_mounts    = var.image_mounts
 
   # Needed for DNS to work inside the chroot on newer Armbian images
   additional_chroot_mounts = [["bind", "/run/systemd", "/run/systemd"]]
