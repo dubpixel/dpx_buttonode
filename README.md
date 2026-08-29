@@ -229,7 +229,7 @@ gunzip -c rockpi-s-dpx-buttonode-0.1.0-beta.4.img.gz \
 
 > **Web UI:** A device config panel runs on port 8080: `http://dpx-buttonode-XXXX.local:8080` — change hostname, switch DHCP/static IP, manage devices, discover other buttonodes, and **switch between Buttons and Satellite mode**.
 
-> **SSH:** enabled — `ssh root@dpx-buttonode-XXXX.local` — default password `1234` (Armbian forces a change on first login).
+> **SSH:** disabled by default, no hardcoded credential — see [SSH into the device](#ssh-into-the-device) below.
 
 ---
 
@@ -346,17 +346,17 @@ http://dpx-buttonode-XXXX.local:8080
 SSH ships **disabled**, and there's no hardcoded default credential — enable it from the web UI's **SSH**
 tab. On first boot, a random per-device root password is generated automatically. It's deliberately
 **never shown on the web UI itself** (that page has no login of its own) — the only place it's ever
-revealed is the Stream Deck: **hold down the SSH key** (in the action row, next to GO) to display it for as
-long as you're holding it. Seeing it requires physically being at the device.
+revealed is the Stream Deck: **press the SSH key** (in the action row, next to GO) to show it; press it
+again to hide it. Seeing it requires physically being at the device.
 
-1. On the Stream Deck, hold the **SSH** key to read the generated password.
+1. On the Stream Deck, press the **SSH** key to reveal the generated password (press again to hide it).
 2. Enter it in the web UI's **Enable SSH** form (or use it to `ssh` in directly — SSH being off just means
    the `ssh` service isn't running yet; enabling it from the UI starts it).
 3. **Set your own password** via the same tab — this deletes the generated one, and the SSH key goes blank.
 
 **No Stream Deck attached at first boot?** The generated password is not recoverable remotely by design —
 there is currently no other way to retrieve it. Connect a deck temporarily (it only needs to be attached
-long enough to hold the SSH key once) to get in, or reset the root password locally instead
+long enough to press the SSH key once) to get in, or reset the root password locally instead
 (`sudo passwd root` via a serial console / direct login, if your board supports one).
 
 ```bash
@@ -652,7 +652,11 @@ build {
     inline = [
       "rm -f /root/.not_logged_in_yet",
       "echo your-device-name > /etc/hostname",
-      "systemctl disable ssh || true",
+      # Disable BOTH units -- ssh.socket alone keeps systemd listening on
+      # :22 and lazily starting ssh.service on demand (socket activation),
+      # so disabling only ssh.service does not actually disable SSH.
+      "systemctl disable --now ssh.socket || true",
+      "systemctl disable --now ssh.service || true",
     ]
   }
 
