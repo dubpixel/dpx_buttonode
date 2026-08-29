@@ -343,11 +343,11 @@ def draw_go_key(deck, key):
 def draw_ssh_key(deck, key):
     """Idle state for the SSH key — a neutral "SSH" hint, never the
     password itself. The password (see dpx-init-ssh.sh) only appears
-    while this key is physically HELD DOWN, in make_key_callback's
-    on_key — reveal-on-hold, not always-on-display. That's deliberate:
-    the whole point is requiring someone to actually be at the device
-    with a finger on the key, not just able to glance at the screen or
-    reach the web UI over the LAN. Blank once the password's been
+    after this key is pressed, toggling back off on the next press (see
+    make_key_callback's on_key) — not always-on-display. That's
+    deliberate: the whole point is requiring someone to actually be at
+    the device with a finger on the key, not just able to glance at the
+    screen or reach the web UI over the LAN. Blank once the password's been
     superseded by a real one (the file gets deleted the moment
     dpx-buttonode-ui.py's change_root_password() succeeds — nothing left
     to reveal). Readable here because dpx-splash is already in the
@@ -535,15 +535,21 @@ def make_key_callback(state):
         octet_keys = octet_key_indices(deck)
 
         if ssh_key is not None and key == ssh_key:
-            # Hold-to-reveal, not always-on-display: the password only
-            # appears while a finger is physically on this key, and reverts
-            # to the neutral "SSH" hint the instant it's released. Requires
-            # actually being at the device, not just able to see the
-            # screen or reach the web UI over the LAN.
+            # Press-to-toggle, not always-on-display: still requires an
+            # actual finger on the physical key to reveal (not just able to
+            # see the screen or reach the web UI over the LAN), but doesn't
+            # require KEEPING it held — a finger resting on the key blocks
+            # reading the very thing it's revealing. Confirmed on real
+            # hardware 2026-08-28: hold-to-reveal was "very tricky" to
+            # actually read. Acts on press only; release is a no-op so a
+            # long press doesn't double-toggle.
+            if not pressed:
+                return
             pw = get_initial_ssh_password()
             if not pw:
                 return  # nothing left to reveal — password already changed
-            if pressed:
+            state["ssh_revealed"] = not state.get("ssh_revealed", False)
+            if state["ssh_revealed"]:
                 deck.set_key_image(key, render_key(deck, pw, font_size=13, bg=SSH_PW_COLOR))
             else:
                 draw_ssh_key(deck, key)
@@ -614,6 +620,7 @@ def run_splash_loop():
                 "prefix_pending": get_current_prefix(),
                 "ip_edit": {},
                 "busy": False,
+                "ssh_revealed": False,
             }
             deck.set_key_callback(make_key_callback(state))
             print(f"dpx-deck-splash: opened {deck.deck_type()} ({deck.key_count()} keys)")
