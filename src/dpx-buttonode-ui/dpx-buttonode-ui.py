@@ -552,6 +552,41 @@ def page(content, tab="status", alert="", alert_cls="a-ok"):
 
 # ── Page renderers ─────────────────────────────────────────────────────────────
 
+def get_uptime_human():
+    """System uptime as e.g. '2d 4h 12m', from /proc/uptime."""
+    try:
+        with open("/proc/uptime") as f:
+            secs = int(float(f.read().split()[0]))
+    except (OSError, ValueError, IndexError):
+        return "unknown"
+    days, rem = divmod(secs, 86400)
+    hours, rem = divmod(rem, 3600)
+    mins, _ = divmod(rem, 60)
+    parts = [f"{days}d"] if days else []
+    if days or hours:
+        parts.append(f"{hours}h")
+    parts.append(f"{mins}m")
+    return " ".join(parts)
+
+
+def get_ram_usage_human():
+    """(used/total string, percent used) from /proc/meminfo. MemAvailable
+    (not MemFree) is used for 'used' so page cache doesn't read as pressure."""
+    try:
+        info = {}
+        with open("/proc/meminfo") as f:
+            for line in f:
+                k, v = line.split(":", 1)
+                info[k] = int(v.strip().split()[0])
+        total_kb = info["MemTotal"]
+        avail_kb = info["MemAvailable"]
+        used_kb  = total_kb - avail_kb
+        pct = round(used_kb / total_kb * 100) if total_kb else 0
+        return f"{used_kb / 1024:.0f}MB / {total_kb / 1024:.0f}MB", pct
+    except (OSError, ValueError, KeyError):
+        return "unknown", 0
+
+
 def render_status(alert="", alert_cls="a-ok"):
     ip      = esc(get_ip())
     mac     = esc(get_mac())
@@ -563,6 +598,9 @@ def render_status(alert="", alert_cls="a-ok"):
     mode    = get_dpx_mode()
     ss      = svc_active("satellite")
     cs      = svc_active("companion")
+    uptime  = esc(get_uptime_human())
+    ram_str, ram_pct = get_ram_usage_human()
+    ram_color = "#f85149" if ram_pct >= 90 else ("#e3b341" if ram_pct >= 70 else "#3fb950")
     # Mode card: label + active service indicator + detail line
     if mode == "satellite":
         sat_host, sat_port = get_satellite_config()
@@ -594,6 +632,10 @@ def render_status(alert="", alert_cls="a-ok"):
 {mode_card}
   <div class="card"><div class="lbl">mDNS</div>
     <div class="val {'on' if av else 'off'}">{'active' if av else 'inactive'}</div></div>
+  <div class="card"><div class="lbl">Uptime</div>
+    <div class="val" style="font-size:14px">{uptime}</div></div>
+  <div class="card"><div class="lbl">RAM</div>
+    <div class="val" style="font-size:14px;color:{ram_color}">{esc(ram_str)}</div></div>
 </div>
 <div class="sec"><h2>USB Devices</h2>
   <ul class="usb">
