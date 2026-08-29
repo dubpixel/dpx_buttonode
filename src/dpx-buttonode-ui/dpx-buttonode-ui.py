@@ -547,10 +547,11 @@ def page(content, tab="status", alert="", alert_cls="a-ok"):
     # not just the Status page. Sticky so it stays visible while scrolling.
     mode = get_dpx_mode()
     ram_str, ram_pct = get_ram_usage_human()
+    dash_suffix = " +D" if (dashboard_installed() and dashboard_enabled()) else ""
     statusbar = (
         f'<div class="statusbar">'
         f'<span><b>v{esc(bld["dpx_version"])}</b> [{esc(variant_tag)}]</span>'
-        f'<span>MODE: <b style="color:{mode_color_for(mode)}">{esc(mode).upper()}</b></span>'
+        f'<span>MODE: <b style="color:{mode_color_for(mode)}">{esc(mode).upper()}{dash_suffix}</b></span>'
         f'<span>RAM: <b style="color:{ram_color_for(ram_pct)}">{esc(ram_str)}</b></span>'
         f'</div>'
     )
@@ -1479,6 +1480,9 @@ def render_mode(alert="", alert_cls="a-ok"):
         "companion": ("#9e6a03", "C — Bitfocus Companion"),
     }
     badge_color, badge_text = MODE_META.get(mode, MODE_META["buttons"])
+    dash_on = dashboard_installed() and dashboard_enabled()
+    if dash_on:
+        badge_text += " +D"
 
     def mode_btn(target, label, active):
         if active:
