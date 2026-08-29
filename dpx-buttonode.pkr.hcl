@@ -68,20 +68,24 @@ variable "image_mounts" {
   EOT
 }
 
-source "arm-image" "armbian" {
+source "arm-image" "base" {
   iso_checksum      = "none"
   iso_url           = var.url
   target_image_size = var.variant == "full" ? 8000000000 : 5000000000
-  output_filename   = "output-dpx-buttonode/armbian-dpx-buttonode.img"
+  output_filename   = "output-dpx-buttonode/dpx-buttonode.img"
   qemu_binary     = "qemu-aarch64-static"
   image_mounts    = var.image_mounts
 
-  # Needed for DNS to work inside the chroot on newer Armbian images
+  # Needed for DNS to work inside the chroot on newer Armbian/Raspberry Pi OS images
   additional_chroot_mounts = [["bind", "/run/systemd", "/run/systemd"]]
 }
 
 build {
-  sources = ["source.arm-image.armbian"]
+  # Source is named "base", not "armbian" -- this same block builds both
+  # the Armbian pipeline (armbian-builder.yaml) and the Raspberry Pi OS
+  # pipeline (raspios-builder.yaml); naming it "armbian" made every build
+  # log line read "arm-image.armbian: ..." even for real Pi OS builds.
+  sources = ["source.arm-image.base"]
 
   # Copy the pre-downloaded .deb into the image
   provisioner "file" {

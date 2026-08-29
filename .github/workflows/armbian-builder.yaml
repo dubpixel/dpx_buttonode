@@ -388,7 +388,7 @@ jobs:
 
       - name: Zero free space and compress image
         run: |
-          IMG="output-dpx-buttonode/armbian-dpx-buttonode.img"
+          IMG="output-dpx-buttonode/dpx-buttonode.img"
           VERSION=$(cat artifacts/buttons-version.txt)
           BUILD_VERSION=$(cat VERSION)
           CUSTOM="${{ inputs.custom-board }}"
