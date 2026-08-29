@@ -53,7 +53,11 @@ echo "==> Companion Dashboard package installed"
 # No `buttons` group — Dashboard never touches the Stream Deck / HID
 # devices, only Companion's REST API over the network.
 if ! id -u dpx-dashboard >/dev/null 2>&1; then
-    adduser --system --shell /bin/bash dpx-dashboard
+    # --group is required to get a matching dpx-dashboard group -- without
+    # it adduser --system falls back to a default system group instead,
+    # confirmed live 2026-08-29 (broke the chown below with
+    # "invalid group: 'dpx-dashboard:dpx-dashboard'").
+    adduser --system --group --shell /bin/bash dpx-dashboard
 fi
 
 # ── X session launch files ──────────────────────────────────────────────────
