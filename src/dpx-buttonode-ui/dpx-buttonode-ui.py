@@ -843,7 +843,15 @@ def verify_root_password(candidate):
 
 
 def ssh_enabled():
-    return svc_active("ssh")
+    """True if SSH is actually reachable right now. Checking only
+    ssh.service is not enough: Ubuntu ships ssh.socket enabled alongside
+    it, and socket activation means systemd listens on :22 and lazily
+    starts ssh.service on the first connection attempt regardless of the
+    service's own enabled/active state. Confirmed live 2026-08-28 — a
+    freshly-flashed device with ssh.service "disabled" was still fully
+    SSH-reachable the whole time. Either unit being active means SSH is
+    reachable."""
+    return svc_active("ssh.socket") or svc_active("ssh.service")
 
 
 def get_initial_ssh_password():
@@ -857,10 +865,16 @@ def get_initial_ssh_password():
 
 
 def set_ssh_enabled(enable):
+    """Enabling only ever needs ssh.service — starting it directly works
+    fine regardless of ssh.socket's state. Disabling must stop BOTH
+    ssh.service and ssh.socket, or the socket unit keeps systemd
+    listening on :22 and transparently starts ssh.service on demand,
+    silently undoing the disable (see ssh_enabled())."""
     if enable:
-        run(["systemctl", "enable", "--now", "ssh"])
+        run(["systemctl", "enable", "--now", "ssh.service"])
     else:
-        run(["systemctl", "disable", "--now", "ssh"])
+        run(["systemctl", "disable", "--now", "ssh.socket"])
+        run(["systemctl", "disable", "--now", "ssh.service"])
 
 
 def change_root_password(new_password):

@@ -119,7 +119,15 @@ build {
       # on first boot (shown on the deck splash + the web UI's SSH tab
       # until changed); the web UI's SSH tab is the only way to enable
       # SSH itself. See README's security section / AGENTS.md gotcha 10a.
-      "systemctl disable ssh || true",
+      #
+      # Must disable ssh.socket too, not just ssh.service — confirmed
+      # live 2026-08-28 that a fresh image with only ssh.service disabled
+      # was still fully SSH-reachable the entire time. Ubuntu ships
+      # ssh.socket enabled alongside ssh.service; socket activation means
+      # systemd listens on :22 and lazily starts ssh.service on the first
+      # connection attempt regardless of the service's own state.
+      "systemctl disable --now ssh.socket || true",
+      "systemctl disable --now ssh.service || true",
 
       # Write build metadata — readable by dpx-buttonode-ui Status page
       "echo 'DPX_VERSION=${var.dpx_version}' > /etc/dpx-buttonode-release",
