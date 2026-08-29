@@ -1,6 +1,6 @@
 
 ---
-## [1.0.0](https://github.com/dubpixel/dpx_buttnode/compare/1.0.0...1.0.0) (releasedate)
+## [1.0.0](https://github.com/dubpixel/dpx_buttonode/compare/1.0.0...1.0.0) (releasedate)
 
 > Description
 

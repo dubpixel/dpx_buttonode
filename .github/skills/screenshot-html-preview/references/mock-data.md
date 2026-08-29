@@ -7,7 +7,7 @@ Keep these consistent across all 6 tab files.
 
 | Field | Value |
 |---|---|
-| Hostname | `dpx-buttnode-8A2F` |
+| Hostname | `dpx-buttonode-8A2F` |
 | IP | `10.50.0.44` |
 | IP/CIDR | `10.50.0.44/22` |
 | MAC | `e4:5f:01:8a:2f:b1` |
@@ -42,9 +42,9 @@ Stream Deck USB path: `1-1.2`
 
 | Node | IP | Self? |
 |---|---|---|
-| `dpx-buttnode-8A2F` | `10.50.0.44` | yes |
-| `dpx-buttnode-3C1A` | `10.50.0.51` | no |
-| `dpx-buttnode-F07E` | `10.50.0.67` | no |
+| `dpx-buttonode-8A2F` | `10.50.0.44` | yes |
+| `dpx-buttonode-3C1A` | `10.50.0.51` | no |
+| `dpx-buttonode-F07E` | `10.50.0.67` | no |
 
 ## Build Info (footer)
 
@@ -61,7 +61,7 @@ Stream Deck USB path: `1-1.2`
 
 ## Python Source Symbol Map
 
-Where to find each piece in `src/dpx-buttnode-ui/dpx-buttnode-ui.py`:
+Where to find each piece in `src/dpx-buttonode-ui/dpx-buttonode-ui.py`:
 
 | Symbol | Approx lines | Notes |
 |---|---|---|

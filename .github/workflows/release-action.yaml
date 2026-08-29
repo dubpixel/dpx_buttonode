@@ -1,4 +1,4 @@
-name: Release — dpx-buttnode Images
+name: Release — dpx-buttonode Images
 
 # Triggers:
 #   1. Manual dispatch (on-demand, any time)
@@ -67,13 +67,13 @@ jobs:
           # Check if any release already exists for this Buttons version.
           # NOTE: no repo checkout in this job, so we cannot read the VERSION
           # file here. Match by Buttons-version prefix instead — if a
-          # dpx-buttnode-<version>-build* tag exists at all, we're done.
+          # dpx-buttonode-<version>-build* tag exists at all, we're done.
           MATCHING_TAG=$(gh release list \
             --repo "${{ github.repository }}" \
             --exclude-drafts \
             --limit 30 \
             --json tagName \
-            --jq "[.[].tagName | select(startswith(\"dpx-buttnode-${MIRROR_VERSION}-build\"))] | first" \
+            --jq "[.[].tagName | select(startswith(\"dpx-buttonode-${MIRROR_VERSION}-build\"))] | first" \
             2>/dev/null || echo "")
 
           echo "Mirror version : ${MIRROR_VERSION}"
@@ -102,9 +102,13 @@ jobs:
         board:
           - rockpi-s
           - orangepizero3
+        variant:
+          - lite
+          - full
     uses: ./.github/workflows/armbian-builder.yaml
     with:
       armbian-board: ${{ matrix.board }}
+      variant: ${{ matrix.variant }}
     permissions:
       contents: read
 
@@ -136,7 +140,7 @@ jobs:
           FORCE: ${{ github.event.inputs.force || 'false' }}
         run: |
           BUILD_VERSION=$(cat VERSION)
-          TAG="dpx-buttnode-${VERSION}-build${BUILD_VERSION}"
+          TAG="dpx-buttonode-${VERSION}-build${BUILD_VERSION}"
           SAT_VERSION=$(node -e "console.log(require('/opt/companion-satellite/package.json').version)" 2>/dev/null || echo "unknown")
           bash scripts/generate-release-notes.sh \
             "$VERSION" release-assets "$BUILD_VERSION" \
@@ -152,7 +156,7 @@ jobs:
 
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
-            --title "dpx-buttnode v${BUILD_VERSION} — Buttons ${VERSION}" \
+            --title "dpx-buttonode v${BUILD_VERSION} — Buttons ${VERSION}" \
             --notes-file /tmp/release-notes.md \
             release-assets/*.img.gz \
             /tmp/buttons-version.txt

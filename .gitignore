@@ -40,10 +40,10 @@ fp-info-cache
 # kicad local profile
 *.kicad_prl
 
-##########------ dpx-buttnode ------######
+##########------ dpx-buttonode ------######
 # Build outputs
 artifacts/
-output-dpx-buttnode/
+output-dpx-buttonode/
 build/
 
 # Downloaded packages (never commit these — use the mirror release instead)
@@ -51,3 +51,10 @@ build/
 *.deb
 *.img
 *.img.gz
+
+# Copilot chat history export (personal, not for repo history)
+_chat-history/
+
+# Local device access notes (hostnames/IPs/credentials for physical test
+# hardware) — never belongs in repo history, even as a stale/rotated value.
+ACCESS.md

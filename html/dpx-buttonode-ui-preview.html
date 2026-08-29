@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>dpx-buttnode-8A2F — dpx-buttnode-ui</title>
+<title>dpx-buttonode-8A2F — dpx-buttonode-ui</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e1e4e8}
@@ -48,13 +48,13 @@ code{background:#21262d;padding:2px 6px;border-radius:4px;font-size:12px;font-fa
 <body>
 
 <div class="hdr">
-  <h1>⯁ dpx-buttnode-8A2F</h1>
-  <span class="tag">dpx-buttnode-ui</span>
+  <h1>⯁ dpx-buttonode-8A2F</h1>
+  <span class="tag">dpx-buttonode-ui</span>
 </div>
 
 <nav class="nav">
-  <a href="#">Status</a>
-  <a href="#" class="on">Hostname</a>
+  <a href="#" class="on">Status</a>
+  <a href="#">Hostname</a>
   <a href="#">Network</a>
   <a href="#">Devices</a>
   <a href="#">Nodes</a>
@@ -62,27 +62,48 @@ code{background:#21262d;padding:2px 6px;border-radius:4px;font-size:12px;font-fa
 </nav>
 
 <div class="wrap">
-  <div class="sec">
-    <h2>Change Hostname</h2>
-    <p class="note">
-      Current hostname: <code>dpx-buttnode-8A2F</code><br>
-      mDNS address: <code>dpx-buttnode-8A2F.local</code><br>
-      The new hostname is applied immediately and persists across reboots.
-    </p>
-    <form method="POST" action="/hostname">
-      <div class="row">
-        <label>New hostname (letters, numbers, hyphens — no spaces)</label>
-        <input type="text" name="hostname" value="dpx-buttnode-8A2F"
-               placeholder="dpx-buttnode-XXXX">
-      </div>
-      <button type="submit" class="btn btn-p">Apply</button>
-      <a href="/" class="btn">Cancel</a>
-    </form>
+
+  <div class="grid">
+    <div class="card" style="grid-column:span 2">
+      <div class="lbl">Hostname</div>
+      <div class="val" style="font-size:15px">dpx-buttonode-8A2F</div>
+    </div>
+    <div class="card">
+      <div class="lbl">IP Address</div>
+      <div class="val">10.50.0.44</div>
+    </div>
+    <div class="card">
+      <div class="lbl">MAC</div>
+      <div class="val" style="font-size:12px">e4:5f:01:8a:2f:b1</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Network</div>
+      <div class="val" style="font-size:14px">DHCP</div>
+    </div>
+    <div class="card">
+      <div class="lbl">Mode</div>
+      <div class="val" style="font-size:16px;font-weight:700;color:#3fb950">BUTTONS</div>
+      <div class="val on" style="font-size:13px">buttons active</div>
+    </div>
+    <div class="card">
+      <div class="lbl">mDNS</div>
+      <div class="val on">active</div>
+    </div>
   </div>
+
+  <div class="sec">
+    <h2>USB Devices</h2>
+    <ul class="usb">
+      <li>Bus 001 Device 003: ID 0fd9:0060 Elgato Systems GmbH Stream Deck MK.2</li>
+      <li>Bus 001 Device 002: ID 0424:2514 Microchip Technology, Inc. USB 2.0 Hub</li>
+      <li>Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub</li>
+    </ul>
+  </div>
+
 </div>
 
 <div class="footer">
-  dpx-buttnode v0.5.0 &nbsp;&middot;&nbsp; buttons 0.1.0-beta.4 &nbsp;&middot;&nbsp; satellite 1.9.1 &nbsp;&middot;&nbsp; main@a3f7c12 &nbsp;&middot;&nbsp; built 2026-07-17
+  dpx-buttonode v0.5.0 &nbsp;&middot;&nbsp; buttons 0.1.0-beta.4 &nbsp;&middot;&nbsp; satellite 1.9.1 &nbsp;&middot;&nbsp; main@a3f7c12 &nbsp;&middot;&nbsp; built 2026-07-17
 </div>
 
 </body>

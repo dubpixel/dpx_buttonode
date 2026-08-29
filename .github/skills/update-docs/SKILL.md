@@ -6,7 +6,7 @@ argument-hint: "Describe what changed, or say 'full audit' to check everything"
 
 # update-docs
 
-Full documentation update workflow for dpx_buttnode. Audits and updates README, CHANGELOG, VERSION, AGENTS.md, roadmap, and dpx_release_note_template.
+Full documentation update workflow for dpx_buttonode. Audits and updates README, CHANGELOG, VERSION, AGENTS.md, roadmap, and dpx_release_note_template.
 
 ## Related Skills
 - **`screenshot-html-preview`** — invoked by Step 3.5 of this skill when the web UI has changed and README screenshots need refreshing. Full procedure in `.github/skills/screenshot-html-preview/SKILL.md`.
@@ -37,7 +37,7 @@ Read these files in parallel before making any changes:
 - `VERSION` — current semver string (single source of truth; no `package.json` in this project)
 - `CHANGELOG.md` — last entry date and version
 - `README.md` — installation paths, Built With list, Usage section, Roadmap
-- `.github/AGENTS.md` — PROJECT block (Status, Branch, Version File, Architecture table)
+- `AGENTS.md` — PROJECT block (Status, Branch, Version File, Architecture table)
 - `dpx_release_note_template.md` — release note format reference
 - `ROADMAP.md` — open and completed items
 
@@ -45,10 +45,10 @@ Also do a broad scan of the project's directory tree (excluding `.git/`, build o
 
 | Area | Path |
 |------|------|
-| Packer definition | `dpx-buttnode.pkr.hcl` |
+| Packer definition | `dpx-buttonode.pkr.hcl` |
 | Shell scripts | `scripts/` |
-| Web UI | `src/dpx-buttnode-ui/` |
-| UI preview pages | `html/dpx-buttnode-ui-*.html` |
+| Web UI | `src/dpx-buttonode-ui/` |
+| UI preview pages | `html/dpx-buttonode-ui-*.html` |
 | GitHub workflows | `.github/workflows/` |
 | Skills | `.github/skills/` |
 
@@ -88,14 +88,14 @@ Add a new entry above the previous one using [Keep a Changelog](https://keepacha
 Rules:
 - Today's date is always used (current session date)
 - Only include categories that have entries — omit empty ones
-- Link issue/PR numbers as `[#N](https://github.com/dubpixel/dpx_buttnode/issues/N)`
+- Link issue/PR numbers as `[#N](https://github.com/dubpixel/dpx_buttonode/issues/N)`
 - If no version bump: add entry under `## [Unreleased]` instead
 - Keep entries factual and precise — what changed and why, not how
 
 ### Step 3.5 — UI Screenshot Refresh (conditional)
 **Trigger this step if any of the following are true:**
-- `src/dpx-buttnode-ui/dpx-buttnode-ui.py` was modified this sprint
-- Any `dpx-buttnode-ui-*.html` preview file was modified or regenerated
+- `src/dpx-buttonode-ui/dpx-buttonode-ui.py` was modified this sprint
+- Any `dpx-buttonode-ui-*.html` preview file was modified or regenerated
 - The README references UI screenshots and the UI has visually changed
 - The user's argument mentions "UI", "screenshots", or "preview"
 
@@ -123,11 +123,12 @@ The README uses the dpx Best-README-Template fork v0.5.7. **Never structurally r
 **Full audit mode:** list proposed README changes in the plan and wait for confirmation before writing (AGENTS.md §6).
 
 ### Step 5 — AGENTS.md Project Block
-Update the `## PROJECT: dpx-buttnode` section in `.github/AGENTS.md`:
+Update the `## PROJECT: dpx-buttonode` section in `AGENTS.md`:
 - **Status line** — current version + date + ✅ or 🚧
 - **Branch line** — current working branch (or `main` if on main)
 - **Version File line** — current version number
-- **Architecture table** — add any new components, update paths or notes if things moved
+- **Architecture table** — add any new components, update paths or notes if things moved; reread the intro paragraph too, not just the table rows — it goes stale just as easily (e.g. describing a single build pipeline after a second one was added)
+- **Gotchas & Landmines** — this is the step most likely to get skipped, so check it explicitly every time: did this sprint's work involve debugging a non-obvious failure, a wrong assumption that cost real time, or a fix for something that isn't visible just from reading the code? If so, it needs a numbered gotcha entry (bug/error text, root cause, the fix, and the date confirmed live) — not just a CHANGELOG line. CHANGELOG says *what* shipped; a gotcha preserves *why a future agent shouldn't redo the same mistake*. Skim git commit messages and diffs from this sprint's range for `fix:`/`bug`/wording like "confirmed live" as a prompt for what might need one.
 
 Do NOT modify the global directives sections of AGENTS.md (§1 through §6 boilerplate) — only the `## PROJECT` block.
 
@@ -150,13 +151,14 @@ Before finishing, confirm:
 - [ ] CHANGELOG has an entry for this version with today's date
 - [ ] README Prerequisites and paths are accurate
 - [ ] AGENTS.md Status line shows correct version and date
+- [ ] AGENTS.md Gotchas & Landmines has an entry for any non-obvious bug/fix from this sprint
 - [ ] ROADMAP completed items are checked off
 - [ ] No placeholder text left in docs (e.g. `[Project Name]`, `[e.g., ...]`)
 - [ ] README confirmed with user before committing (per AGENTS.md §6)
 
 ---
 
-## dpx_buttnode Project Conventions
+## dpx_buttonode Project Conventions
 
 - `VERSION` file is the **single source of truth** — no `package.json` mirrors it
 - Branch naming: `feature/description`, `fix/description`, `docs/description`
@@ -174,7 +176,7 @@ Before finishing, confirm:
 | `CHANGELOG.md` | New version entry |
 | `README.md` | About, Built With, Getting Started, Roadmap |
 | `ROADMAP.md` | Item status and new items |
-| `.github/AGENTS.md` | PROJECT block only |
+| `AGENTS.md` | PROJECT block only |
 | `dpx_release_note_template.md` | Filled in for releases |
-| `html/dpx-buttnode-ui-*.html` | Regenerated by screenshot-html-preview skill (Step 3.5) |
+| `html/dpx-buttonode-ui-*.html` | Regenerated by screenshot-html-preview skill (Step 3.5) |
 | `images/*.png` | Updated screenshots from screenshot-html-preview skill (Step 3.5) |

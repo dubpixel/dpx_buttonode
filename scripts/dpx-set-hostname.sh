@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dpx-set-hostname.sh
-# Sets this device's hostname to dpx-buttnode-XXXX where XXXX is the last
+# Sets this device's hostname to dpx-buttonode-XXXX where XXXX is the last
 # 4 hex characters (uppercase) of the primary Ethernet MAC address.
 #
 # Installed at: /usr/local/bin/dpx-set-hostname.sh
@@ -55,7 +55,7 @@ fi
 # Strip colons, take last 4 hex chars (last 2 MAC octets), uppercase.
 # e.g. aa:bb:cc:dd:ee:ff → EEFF
 SUFFIX=$(echo "$MAC" | tr -d ':' | rev | cut -c1-4 | rev | tr '[:lower:]' '[:upper:]')
-NEW_HOSTNAME="dpx-buttnode-${SUFFIX}"
+NEW_HOSTNAME="dpx-buttonode-${SUFFIX}"
 
 echo "dpx-set-hostname: iface=${IFACE_USED}  MAC=${MAC}  →  ${NEW_HOSTNAME}"
 

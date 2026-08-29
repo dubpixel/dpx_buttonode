@@ -1,4 +1,4 @@
-title: dpx-buttnode
+title: dpx-buttonode
 description: Flash-ready Armbian images with Bitfocus Buttons USB Relay + Companion Satellite pre-installed for ARM SBCs
 remote_theme: pages-themes/midnight@v0.2.0
 plugins:

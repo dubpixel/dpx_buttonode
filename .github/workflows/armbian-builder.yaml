@@ -1,4 +1,4 @@
-name: Build Armbian + dpx-buttnode Image
+name: Build Armbian + dpx-buttonode Image
 
 # Reusable by release-action.yaml, or triggered manually for a single board.
 # No Bitfocus credentials required — pulls the package from the repo's
@@ -254,11 +254,24 @@ on:
         required: false
         default: ''
         type: string
+      variant:
+        description: 'Image variant'
+        required: false
+        default: 'lite'
+        type: choice
+        options:
+          - lite
+          - full
   workflow_call:
     inputs:
       armbian-board:
         description: 'Armbian board target'
         required: true
+        type: string
+      variant:
+        description: "Image variant: 'lite' or 'full'"
+        required: false
+        default: 'lite'
         type: string
     outputs:
       artifact-name:
@@ -304,11 +317,12 @@ jobs:
           RAW_BRANCH="${{ github.ref_name }}"
           BRANCH_SLUG=$(echo "$RAW_BRANCH" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9._-]|-|g')
           COMMIT=$(echo "${{ github.sha }}" | cut -c1-7)
+          VARIANT="${{ inputs.variant || 'lite' }}"
           # main: no branch slug; other branches: append slug so artifacts are self-identifying
           if [ "$RAW_BRANCH" = "main" ]; then
-            ARTIFACT_NAME="${BOARD}-dpx-buttnode-${BUILD_VERSION}-${COMMIT}"
+            ARTIFACT_NAME="${BOARD}-dpx-buttonode-${BUILD_VERSION}-${VARIANT}-${COMMIT}"
           else
-            ARTIFACT_NAME="${BOARD}-dpx-buttnode-${BUILD_VERSION}-${BRANCH_SLUG}-${COMMIT}"
+            ARTIFACT_NAME="${BOARD}-dpx-buttonode-${BUILD_VERSION}-${VARIANT}-${BRANCH_SLUG}-${COMMIT}"
           fi
           echo "buttons-version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "artifact-name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
@@ -353,7 +367,7 @@ jobs:
       - name: Initialize Packer plugins
         env:
           PACKER_GITHUB_API_TOKEN: ${{ github.token }}
-        run: sudo --preserve-env=PACKER_GITHUB_API_TOKEN packer init dpx-buttnode.pkr.hcl
+        run: sudo --preserve-env=PACKER_GITHUB_API_TOKEN packer init dpx-buttonode.pkr.hcl
 
       - name: Build customized image with Packer
         run: |
@@ -365,7 +379,8 @@ jobs:
             -var "git_branch=${{ github.ref_name }}" \
             -var "git_commit=$(echo '${{ github.sha }}' | cut -c1-7)" \
             -var "build_date=$(date -u +%Y-%m-%d)" \
-            dpx-buttnode.pkr.hcl
+            -var "variant=${{ inputs.variant || 'lite' }}" \
+            dpx-buttonode.pkr.hcl
 
       # ── Compress and upload ────────────────────────────────────────────────
       - name: Install zerofree
@@ -373,7 +388,7 @@ jobs:
 
       - name: Zero free space and compress image
         run: |
-          IMG="output-dpx-buttnode/armbian-dpx-buttnode.img"
+          IMG="output-dpx-buttonode/armbian-dpx-buttonode.img"
           VERSION=$(cat artifacts/buttons-version.txt)
           BUILD_VERSION=$(cat VERSION)
           CUSTOM="${{ inputs.custom-board }}"
@@ -382,10 +397,11 @@ jobs:
           RAW_BRANCH="${{ github.ref_name }}"
           BRANCH_SLUG=$(echo "$RAW_BRANCH" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9._-]|-|g')
           COMMIT=$(echo "${{ github.sha }}" | cut -c1-7)
+          VARIANT="${{ inputs.variant || 'lite' }}"
           if [ "$RAW_BRANCH" = "main" ]; then
-            FINAL_NAME="${BOARD}-dpx-buttnode-${BUILD_VERSION}-${COMMIT}.img"
+            FINAL_NAME="${BOARD}-dpx-buttonode-${BUILD_VERSION}-${VARIANT}-${COMMIT}.img"
           else
-            FINAL_NAME="${BOARD}-dpx-buttnode-${BUILD_VERSION}-${BRANCH_SLUG}-${COMMIT}.img"
+            FINAL_NAME="${BOARD}-dpx-buttonode-${BUILD_VERSION}-${VARIANT}-${BRANCH_SLUG}-${COMMIT}.img"
           fi
 
           LOOP=$(sudo losetup -fP --show "$IMG")

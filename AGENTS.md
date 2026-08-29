@@ -4,31 +4,75 @@ This document provides operational directives for AI coding assistants (GitHub C
 
 ---
 
-## PROJECT: dpx-buttnode
+## PROJECT: dpx-buttonode
 
-**Status:** v0.5.0 complete (2026-07-24) ✅  
-**Branch:** `main` (feature/dpx-buttnode-rename-satellite pending PR)  
-**Version File:** `VERSION` (currently 0.5.0)
+**Status:** `feature/deck-hid-splash` carries everything — the rename, the Full/Lite
+Companion variant system, the deck HID splash feature (all 3 phases,
+hardware-validated), the SSH security overhaul, and the on-device
+auto-update system. Not yet merged to `main`. Draft/prerelease test builds
+only so far; see `FIRST-BOOT-TEST-PLAN.md` for the checklist a real fresh
+flash needs before this is release-ready.  
+**Branch:** `feature/deck-hid-splash`  
+**Version File:** `VERSION` (0.7.0)
+
+**Branch stack:**
+- `main` — **stale.** Predates the `dpx_buttnode`→`dpx_buttonode` rename
+  and everything since. Do not branch new work off `main`.
+- `refactor/rename-dpx-buttonode` — superseded. The rename it did landed
+  on `feature/deck-hid-splash` too; this branch itself is no longer where
+  active work happens.
+- `feature/deck-hid-splash` — **the active branch.** Contains the rename,
+  the v0.6.0 Full/Lite Companion variant system, and everything documented
+  in `CHANGELOG.md`'s `[0.7.0]` entry. This is what gets built/tested/
+  eventually merged.
+
+**Immediate next steps:**
+1. Build a fresh full-variant image from current `feature/deck-hid-splash`
+   HEAD and walk `FIRST-BOOT-TEST-PLAN.md` on a genuinely blank flash —
+   several real bugs were found and fixed live during 2026-08-28/29
+   hardware testing (see CHANGELOG `[0.7.0]` Fixed section) that were
+   never themselves present in the image actually tested that day.
+2. Merge to `main` once a fresh-flash pass comes back clean.
+
+**Open issues:**
+- Issue #4: make Full variant opt-in on automated releases (`build-full`
+  boolean input on `release-action.yaml` so cron only builds Lite)
+- Issue #5: optional Companion Dashboard integration (scoping only)
+- Issue #6: cross-platform (Armbian board matrix + separate Raspberry Pi
+  OS path) support (scoping only)
+
+---
 
 ### Architecture (2-minute summary)
 
-Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` Armbian images for ARM single-board computers with **both Bitfocus Buttons USB Relay and Companion Satellite** pre-installed. Default mode is Buttons; switch to Satellite via the web UI or SSH — no re-flash needed. Two-stage build: (1) Armbian build framework compiles a minimal Ubuntu Noble base image for the target board, (2) HashiCorp Packer chroots into the image — installs the Buttons `.deb`, then builds Companion Satellite from source via the official `pi-image/install.sh` script (Node.js + Yarn, ~30–60 min extra). The Buttons package is distributed as a `.tar.gz` from Bitfocus's auth-gated portal — this project solves that by maintaining a self-hosted mirror release (`buttons-deb-mirror`) in the repo, so CI only needs the built-in `GITHUB_TOKEN`. No Bitfocus credentials ever touch CI.
+Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` images for ARM single-board computers with **Bitfocus Buttons USB Relay, Companion Satellite, and (Full variant) Companion** pre-installed, plus an opt-in Companion Dashboard kiosk display. Default mode is Companion Satellite (as of 2026-08-24 — was Buttons before); switch modes via the web UI, SSH, or the deck itself (Phases 2/3, hardware-validated — stage a mode with the octet keys, confirm with GO) — no re-flash needed.
+
+**Two base-OS pipelines feed the same Packer customization stage** (`dpx-buttonode.pkr.hcl`) — this is deliberate, not two copies of the same thing: Armbian is for the non-Pi board families it actually supports well (Rockchip, Allwinner, Amlogic — e.g. `rockpi-s`, `orangepizero3`); real Raspberry Pi 4/5 hardware gets actual Raspberry Pi OS, never the Armbian `rpi4b`/`rpi5b` dropdown entries (Armbian's Pi support is secondary to the boards it's built for, especially for GPU/HDMI/VideoCore). Both pipelines download/build a base `.img`, then hand it to the identical Packer chroot stage:
+- `.github/workflows/armbian-builder.yaml` — Armbian build framework compiles a minimal Ubuntu Noble base image per board (`armbian-board` input, ~30-60+ min compile).
+- `.github/workflows/raspios-builder.yaml` — downloads the official Raspberry Pi OS Lite (64-bit) image directly from Raspberry Pi's own release manifest (same one Raspberry Pi Imager uses); one universal image covers Pi 4/5, no board matrix needed. Raspberry Pi OS ships two partitions (boot + root) vs. Armbian's one — see AGENTS.md gotcha #17 for why `image_mounts` has to differ per pipeline.
+
+Packer then installs the Buttons `.deb`, the deck splash, Companion (Full variant only, must run before Satellite — gotcha #13), Companion Satellite, and the opt-in Dashboard kiosk — same provisioner sequence regardless of which OS pipeline produced the base image. The Buttons package is distributed as a `.tar.gz` from Bitfocus's auth-gated portal — this project solves that by maintaining a self-hosted mirror release (`buttons-deb-mirror`) in the repo, so CI only needs the built-in `GITHUB_TOKEN`. No Bitfocus credentials ever touch CI.
 
 | Component | Tech/Location | Purpose | Notes |
 |-----------|---------------|---------|-------|
-| Packer build definition | HCL / `dpx-buttnode.pkr.hcl` | Chroot customization of Armbian image | Uses `arm-image` plugin v0.2.7; targets 5 GB image; runs both install scripts |
-| Buttons install script | Bash / `scripts/install-buttons.sh` | Installs Buttons `.deb`, installs dpx-buttnode-ui + dpx-set-hostname, enables all services, registers mDNS | Runs as root inside Packer shell provisioner |
+| Packer build definition | HCL / `dpx-buttonode.pkr.hcl` | Chroot customization of the base image — shared by both OS pipelines | Uses `arm-image` plugin v0.2.7; targets 5/8 GB image (lite/full); `image_mounts` var must match the source image's partition count (gotcha #17) |
+| Buttons install script | Bash / `scripts/install-buttons.sh` | Installs Buttons `.deb`, installs dpx-buttonode-ui + dpx-set-hostname, enables all services, registers mDNS | Runs as root inside Packer shell provisioner |
 | Satellite install script | Bash / `scripts/install-satellite.sh` | Installs Companion Satellite from source, disables it (buttons is default), adds `satellite` user to `buttons` group | Runs after `install-buttons.sh`; needs network inside chroot; ~30-60 min |
-| Hostname script | Bash / `scripts/dpx-set-hostname.sh` | Sets `dpx-buttnode-XXXX` hostname from MAC on first boot | Reads MAC from sysfs; oneshot service runs Before=network.target avahi-daemon.service |
-| Web UI | Python / `src/dpx-buttnode-ui/dpx-buttnode-ui.py` | Device config UI on port 8080: hostname, DHCP/static network, USB devices, node discovery, **mode switch** | Pure Python 3 stdlib; tabs: Status, Hostname, Network, Devices, Nodes, Mode |
-| UI preview pages | HTML / `html/dpx-buttnode-ui-*.html` | Static mock previews of each UI tab for screenshots and dev reference | Moved to `html/` subfolder; file map in `.github/skills/screenshot-html-preview/SKILL.md` |
-| Mode file | `/etc/dpx-mode` | Persists current mode (`buttons` or `satellite`) across reboots | Read by UI and by switch logic; written on mode change |
+| Hostname script | Bash / `scripts/dpx-set-hostname.sh` | Sets `dpx-buttonode-XXXX` hostname from MAC on first boot | Reads MAC from sysfs; oneshot service runs Before=network.target avahi-daemon.service |
+| Web UI | Python / `src/dpx-buttonode-ui/dpx-buttonode-ui.py` | Device config UI on port 8080: hostname, DHCP/static network, USB devices, node discovery, **mode switch**, Dashboard toggle | Pure Python 3 stdlib; tabs: Status (incl. Uptime/RAM), Hostname, Network, Devices (incl. Dashboard toggle), Nodes, Mode, SSH, Updates |
+| UI preview pages | HTML / `html/dpx-buttonode-ui-*.html` | Static mock previews of each UI tab for screenshots and dev reference | Moved to `html/` subfolder; file map in `.github/skills/screenshot-html-preview/SKILL.md` |
+| Mode file | `/etc/dpx-mode` | Persists current mode (`buttons`, `satellite`, or `companion`) across reboots | Read by UI and by switch logic; written on mode change |
 | Satellite config | `/etc/dpx-satellite.conf` | Persists Companion server HOST/PORT | Written by UI POST /satellite-config; also stages `/boot/satellite-config` |
 | Download script | Bash / `scripts/download-buttons.sh` | Pulls `.tar.gz` from mirror release, extracts `.deb` | Primary: `gh release download`; fallback: `gh api /releases` list + `curl` |
 | Mirror upload helper | Bash / `scripts/upload-mirror.sh` | LOCAL script — uploads new Bitfocus package to mirror release | Run by maintainer when new Buttons version drops; requires `gh` auth |
-| Build workflow | YAML / `.github/workflows/armbian-builder.yaml` | Reusable: builds Armbian + downloads package + runs Packer + uploads artifact | Called by `release-action.yaml` or triggered manually |
-| Release workflow | YAML / `.github/workflows/release-action.yaml` | Daily cron version check + matrix build + GitHub Release publish | Compares mirror asset filename against latest release tag to detect new versions |
+| Companion install script | Bash / `scripts/install-companion.sh` | Installs full Bitfocus Companion inside Packer chroot (Full variant only); disables service on install | Reads COMPANION_BUILD=stable; writes COMPANION_VERSION to `/etc/dpx-buttonode-release` |
+| Build workflow (Armbian) | YAML / `.github/workflows/armbian-builder.yaml` | Reusable: builds Armbian + downloads package + runs Packer + uploads artifact | `armbian-board` + `variant` inputs (lite/full); artifact named `{board}-dpx-buttonode-{ver}-{variant}-{commit}`; retention 3 days |
+| Build workflow (Raspberry Pi OS) | YAML / `.github/workflows/raspios-builder.yaml` | Reusable: downloads official Raspberry Pi OS Lite (64-bit) + runs the same Packer stage + uploads artifact | `variant` input only (no board matrix — one image covers Pi 4/5); artifact named `rpi-dpx-buttonode-{ver}-{variant}-{commit}`; retention 3 days; added 2026-08-29 for issue #6 |
+| Release workflow | YAML / `.github/workflows/release-action.yaml` | Daily cron version check + matrix build + GitHub Release publish | Matrix: `board × variant` (rockpi-s + orangepizero3 × lite + full); version prefix-match on mirror asset name |
 | Package mirror | GitHub Release / tag `buttons-deb-mirror` | Hosts the Bitfocus `.tar.gz` for CI to download | **Maintainer updates this when Bitfocus ships a new version** |
+| Deck splash script | Python / `src/dpx-deck-splash/dpx-deck-splash.py` | Draws IP + mDNS hostname on the Stream Deck's keys during boot; stage-then-GO mode/network config via keypresses (Phases 2/3, hardware-validated) | NOT stdlib-only (unlike the UI) — own venv at `/opt/dpx-deck-splash/venv` (`streamdeck` + `Pillow`); SSH key is press-to-toggle reveal |
+| Deck splash install script | Bash / `scripts/install-deck-splash.sh` | Provisions the venv, installs the script + `dpx-deck-splash.service`, creates the low-priv `dpx-splash` user in the `buttons` group | Runs after `install-buttons.sh` — needs the `buttons` group + hidraw udev rule that package creates |
+| Dashboard install script | Bash / `scripts/install-dashboard.sh` | Installs `tomhillmeyer/companion-dashboard` as an opt-in X11/Electron kiosk display; installed but NOT enabled — web UI Devices tab toggles it | Runs on both variants (orthogonal to Buttons/Satellite/Companion, not gated by mode); `dpx-dashboard.service` runs as `User=root` (gotcha #20); needs `adduser --system --group` (gotcha #19) |
 
 ### Agent Rules (for this repo)
 
@@ -40,7 +84,7 @@ Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` Armb
 **While coding:**
 - Never commit `.tar.gz`, `.deb`, `.img`, or `.img.gz` files — they are gitignored; use the mirror release
 - Workflow YAML changes must be tested by manually triggering `armbian-builder.yaml` on one board before touching the matrix
-- The `deb_path` variable in `dpx-buttnode.pkr.hcl` must always point to `artifacts/bitfocus-buttons-usb-relay-headless.deb` — that's the normalized name `download-buttons.sh` outputs
+- The `deb_path` variable in `dpx-buttonode.pkr.hcl` must always point to `artifacts/bitfocus-buttons-usb-relay-headless.deb` — that's the normalized name `download-buttons.sh` outputs
 - Keep the `buttons-deb-mirror` release tag permanent — never delete it; it is the CI package source
 - File header per AGENTS.md §3
 
@@ -63,7 +107,7 @@ Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` Armb
 - ❌ Add `BITFOCUS_EMAIL` / `BITFOCUS_PASSWORD` secrets — the mirror approach eliminates this entirely
 - ❌ Commit binary files (`.deb`, `.tar.gz`, images) to git — use the mirror release
 - ❌ Delete or rename the `buttons-deb-mirror` release tag — it breaks all CI builds
-- ❌ Change the Packer output path `output-dpx-buttnode/` without updating the compression step in `armbian-builder.yaml`
+- ❌ Change the Packer output path `output-dpx-buttonode/` without updating the compression step in `armbian-builder.yaml`
 - ❌ Modify the board matrix in `release-action.yaml` without confirming the board is in the Armbian supported list
 
 ### Key Decisions
@@ -85,23 +129,37 @@ Automated GitHub Actions build pipeline that produces flash-ready `.img.gz` Armb
 7. **`netplan version` is not a valid subcommand** on this Armbian build — use `Path("/usr/sbin/netplan").exists()` to detect Netplan instead.
 8. **Satellite service name is `satellite`** (not `companion-satellite`). The official `pi-image/install.sh` creates a systemd unit named `satellite`. Never assume otherwise.
 9. **`/boot/satellite-config` is a one-shot import.** Satellite reads it on startup and resets the file to prevent re-import on next boot. Our persistent store is `/etc/dpx-satellite.conf`. The UI writes both on every save.
+10a. **SSH security fix, hardware-validated 2026-08-28.** Was: every image shipped SSH enabled with the hardcoded root password `1234`, not rotated per build — confirmed on hardware that Armbian's "forces password change on first login" never fires for scripted/automated SSH (only an interactive terminal), so the default stayed valid indefinitely. Now: `dpx-buttonode.pkr.hcl` does `systemctl disable --now ssh.socket` **and** `ssh.service` (SSH ships off, no hardcoded credential at all).
+
+**Landmine found on a genuinely fresh flash 2026-08-28**: disabling only `ssh.service` is not enough. Ubuntu ships `ssh.socket` enabled alongside it — systemd listens on `:22` via the socket unit and lazily starts `ssh.service` on the first connection attempt (socket activation), regardless of the service's own enabled/active state. A fresh image with only `ssh.service` disabled was fully SSH-reachable the *entire time* — `systemctl is-enabled ssh` correctly said "disabled," but that told you nothing about actual reachability. Same gap existed in the web UI's SSH tab: `set_ssh_enabled(False)` only disabled `ssh.service`, so clicking "Disable SSH" didn't actually disable SSH — `ssh.socket` kept the door open. Fixed in both places: the Packer provisioning disables both units, and `ssh_enabled()`/`set_ssh_enabled()` in `dpx-buttonode-ui.py` now check/manage `ssh.socket` too (enabling only ever needs `ssh.service` directly; disabling must stop both). Lesson: `systemctl is-enabled <service>` is not the same question as "is this actually reachable" on any distro using socket activation — check what's actually listening (`ss -ltn`), not just the unit you assume is in front.
+
+`scripts/dpx-init-ssh.sh` (new oneshot service `dpx-init-ssh.service`, mirrors `dpx-set-hostname.service`'s pattern) generates a random 10-char root password on first boot, writes it to `/etc/dpx-initial-ssh-password` (root:buttons, 0640 — group-readable by the same `buttons` group `dpx-splash` is already in for HID access, no new privilege grant). `dpx-buttonode-ui.py`'s new **SSH** tab (`get_initial_ssh_password()`/`ssh_enabled()`/`set_ssh_enabled()`/`change_root_password()`) lets you enable SSH or set a real password — **every action on that tab requires the current root password**, verified via `verify_root_password()` against `/etc/shadow` directly (`crypt`+`spwd`, stdlib — `crypt` is deprecated pending a future Python removal, revisit if the Armbian base Python version changes) — this check is load-bearing: the web UI has zero authentication of its own, so without it "enable SSH from the browser" would be worse than the old default, letting anyone on the LAN turn it on with a password of their choosing. **The generated password itself is deliberately never displayed on the web UI** — the SSH tab only tells you it exists and where to find it. The ONLY place it's ever revealed is `dpx-deck-splash.py`'s SSH key (between SUBNET and GO, decks with >=5 columns), and only while that key is physically held down (hold-to-reveal, reverts to a neutral "SSH" hint on release) — this was a deliberate hardening pass on top of the first cut, which *did* show it on the web page and was correctly called out as pointless (LAN access alone would've revealed it, no physical presence required). The initial-password file is deleted the moment `change_root_password()` succeeds, so it stops appearing anywhere automatically. Threat model is explicitly "keep honest people honest on a home/studio LAN, require physical device access for the bootstrap credential," not resistance to a determined attacker with sustained network access — see README's SSH section.
 10. **HID device permissions — `satellite` user must be in `buttons` group.** The Buttons USB Relay udev rules own `/dev/hidraw*` as `root:buttons`. The `satellite` service user needs `usermod -aG buttons satellite` to open Stream Decks. This is done in `install-satellite.sh`. If a device was installed before this fix, run it manually once.
 11. **Satellite udev rules:** Installed at `/etc/udev/rules.d/50-satellite.rules` by the official install script. They set `GROUP="satellite"` for known vendor IDs — but the Buttons rule (installed earlier) wins for Stream Decks. The group fix (gotcha #10) is the correct solution; do not delete or reorder udev rules.
+12a. **The `streamdeck` PyPI library needs `libhidapi-libusb0`, not `libhidapi-hidraw0` — confirmed on real hardware (Stream Deck MK.2), corrected 2026-08-24.** Originally assumed (wrong, untested guess) that the hidraw backend was the right one since it's what the Buttons udev rule already grants. In fact `streamdeck` 0.9.8 ships exactly one transport — `StreamDeck/Transport/LibUSBHIDAPI.py` — there's no hidraw-native path in the library at all, so it hard-requires `libhidapi-libusb.so` regardless. That means it needs USB-level permissions, not hidraw permissions: a separate udev rule on `/dev/bus/usb/*` (`SUBSYSTEM=="usb", ATTR{idVendor}=="0fd9", MODE="0660", GROUP="buttons"`, in `/etc/udev/rules.d/61-dpx-deck-splash.rules`), since Buttons' own rule only covers `KERNEL=="hidraw*"`. `install-deck-splash.sh` installs the libusb variant + this rule. Lesson: don't guess a dependency's internal transport choice — the library's own source tree (or a live hardware test) settles it, an assumption doesn't.
 12. **Satellite REST API on port 9999:** `http://localhost:9999/api/config` — GET returns current config; POST `{"host":"...","port":16622}` updates it live. Used by the web UI's `/satellite-config` POST handler.
+13. **Companion's official installer purges `/opt/fnm`, which Satellite still depends on — install Companion BEFORE Satellite, never after.** `companion-pi`'s `update.sh` unconditionally does `rm -rf /opt/fnm` as a cleanup step ("fnm is no longer used by the modern flow"), but Satellite's systemd unit and `install-satellite.sh`/`update-satellite.sh` hard-depend on `/opt/fnm/aliases/default/bin/node`. Satellite's own installer freshly reprovisions `/opt/fnm` every time it runs, so as long as it installs *last* this is a non-issue. With the wrong order, every full-variant build shipped with Satellite silently broken from first boot (`systemd: status=203/EXEC`) — found live 2026-08-26. `dpx-buttonode.pkr.hcl` provisions Companion before Satellite for this reason; do not reorder.
+14. **A missing `/dev/hidraw*` node for the Stream Deck doesn't always mean a hardware/kernel problem — try `udevadm trigger` before assuming a physical replug is needed.** Confirmed live 2026-08-26/29: after heavy mode-switch churn, the kernel can still have `hid-generic` bound to the device (visible in `dmesg`) while udev never (re)creates its `/dev/hidraw*` node — invisible to libusb-based consumers (deck-splash, Satellite) but fatal to Companion's hidraw-only surface driver. `udev_retrigger()` in `dpx-buttonode-ui.py` (`udevadm trigger --subsystem-match=hid` + `--subsystem-match=usb`) fixes this without a bus reset or physical replug in the common case, and is baked into `switch_mode()` itself now — it runs before every mode's service starts, not just when someone notices and manually hits `/power-cycle-deck`. The old disruptive `usb_power_cycle()` unbind/bind (which *did* sometimes need an actual physical replug, per the ROADMAP's -110 error history) is only reached as a fallback if the gentle trigger didn't already fix it.
+15. **`/etc/dpx-mode` staying correct after a crash does not mean the mode's service is actually running — never gate a "relaunch" action purely on whether the mode string changed.** Found live 2026-08-29: after `companion.service` died (crash or a reboot following one), `/etc/dpx-mode` still correctly said `companion`, but `switch_mode(new_mode)` bailed out early with `"Already in {mode} mode"` whenever `new_mode == current`, regardless of whether the service was actually up. Both the web UI's Mode tab and the deck's GO key funnel through this same function, so there was no way to relaunch a dead-but-still-selected mode from either. Fixed by checking `svc_active(new_svc)` before treating "same mode" as "nothing to do" — the persisted string is a *record of intent*, not proof of current state.
+16. **Companion's update source is a Bitfocus-hosted API, not GitHub Releases — `bitfocus/companion-pi` has zero releases of its own.** That repo is only the installer scripts (`install.sh`/`update.sh`); the actual build artifacts are served from `https://api.bitfocus.io/v1/product/companion/packages` (confirmed by reading `update-prompt/main.py`, the interactive version picker `update.sh` invokes). Querying `companion-pi`'s GitHub releases for a "latest version" always silently returns nothing — found live 2026-08-29, `_check_companion_update()` had been checking the wrong source since it was written, always showing "unknown." The real API returns entries per build `target` (e.g. `linux-arm64-tgz` for our boards) with a bare `vX.Y.Z` — compare against just the leading `X.Y.Z` of our stored version, which includes a build-hash suffix (`5.0.4+9717-stable-...`) the API's version string never matches.
+17. **Real Raspberry Pi OS images are two-partition (boot + root) — the `arm-image` Packer plugin's `image_mounts` must match the source image's actual partition count exactly, or the build fails with `"error different of partitions than expected"`.** Armbian images are single-partition, so `dpx-buttonode.pkr.hcl` historically hardcoded `image_mounts = ["/"]`. That's now a variable (`var.image_mounts`, default `["/"]` for Armbian); the Raspberry Pi OS pipeline (`.github/workflows/raspios-builder.yaml`) passes `-var 'image_mounts=["/boot","/"]'`. Root-caused by reading the *actual pinned plugin version's* source (`pkg/builder/step_mount_image.go` in `packer-plugin-arm-image` v0.2.7) — don't assume the `main` branch of a pinned dependency matches; confirmed live 2026-08-29.
+18. **`systemctl disable --now <svc>` inside the Packer chroot works on Armbian's older systemd but hard-fails on Raspberry Pi OS Trixie's newer systemd** (`--now cannot be used when systemd is not running... refusing`), killing the whole build with a non-`0` exit. Armbian's chroot silently no-ops `--now` there; Trixie's systemd does not. `--now` (stop) is meaningless at image-build time anyway — nothing is actually running in the chroot — so the fix is just dropping it: plain `systemctl disable <svc>` still removes the enable symlink, which is all that's needed. Confirmed live 2026-08-29, `scripts/install-satellite.sh`'s buttons-relay disable was the offender. The `ssh.socket`/`ssh.service` disables in `dpx-buttonode.pkr.hcl` were already guarded with `|| true` and are unaffected — but any *new* `--now` disable added to a provisioning script needs the same treatment (drop `--now`, or guard it) unless it's confirmed to only ever run at real boot time (not inside the chroot).
+19. **`adduser --system <name>` alone does NOT create a matching same-named group — use `adduser --system --group <name>`, or a later `chown user:user ...` will fail with `invalid group`.** Without `--group`, the system user falls back to a default system group (not one named after the user) on this Debian/Raspberry Pi OS version. Confirmed live 2026-08-29 — broke `install-dashboard.sh`'s `chown -R dpx-dashboard:dpx-dashboard $DASH_HOME` at the very last step of a `full`-variant build.
+20. **A kiosk/X11 systemd service running as a non-root `User=` with `TTYPath`/`StandardInput=tty` set will crash-loop on Pi 4 with `xf86OpenConsole: Cannot open virtual console 1 (Permission denied)`.** A systemd `User=` service doesn't get a real logind/PAM session for VT console access just from `TTYPath` alone — confirmed the hard way in the sibling `dpx_openPanel` project (issue #6, same Pi 4 kiosk problem). `dpx-dashboard.service` (`scripts/install-dashboard.sh`) runs as `User=root` specifically to sidestep this, with no `TTYPath`/`StandardInput=tty`/`TTYReset`/`TTYVHangup` at all — root has console access outright. Chromium/Electron under root also requires `--no-sandbox`, already present in the `.xinitrc`'s launch line. Don't "clean up" this unit back to a non-root user without re-solving this problem first.
 
 ### Common Operations
 
 **Update Buttons to a new version:**
 ```bash
 ./scripts/upload-mirror.sh ~/Downloads/bitfocus-buttons-usb-relay-headless_X.Y.Z_arm64.tar.gz
-gh workflow run release-action.yaml --repo dubpixel/dpx_buttnode
+gh workflow run release-action.yaml --repo dubpixel/dpx_buttonode
 ```
 
 **Manual single-board test build:**
-Go to Actions → Build Armbian + dpx-buttnode Image → Run workflow → pick board
+Go to Actions → Build Armbian + dpx-buttonode Image → Run workflow → pick board
 
 **Force re-release of current version:**
-Actions → Release — dpx-buttnode Images → Run workflow → Force: true
+Actions → Release — dpx-buttonode Images → Run workflow → Force: true
 
 **Add a new board to the matrix:**
 Edit `.github/workflows/release-action.yaml` under `matrix.board`, add the Armbian board ID. Also add it to the `workflow_dispatch` options in `armbian-builder.yaml`.
@@ -112,14 +170,14 @@ Edit `.github/workflows/release-action.yaml` under `matrix.board`, add the Armbi
 
 **Check what version is in the mirror:**
 ```bash
-gh release view buttons-deb-mirror --repo dubpixel/dpx_buttnode --json assets --jq '.assets[].name'
+gh release view buttons-deb-mirror --repo dubpixel/dpx_buttonode --json assets --jq '.assets[].name'
 ```
 
 ### Skills Available
 
 | Skill | When to invoke | What it does |
 |-------|----------------|--------------|
-| `screenshot-html-preview` | After editing `dpx-buttnode-ui.py` or HTML preview files | Python source → static HTML mocks → pixel-accurate screenshots in `images/` |
+| `screenshot-html-preview` | After editing `dpx-buttonode-ui.py` or HTML preview files | Python source → static HTML mocks → pixel-accurate screenshots in `images/` |
 | `update-docs` | Bumping version, updating README, CHANGELOG, or release prep | Semver bump, changelog entry, README accuracy check, roadmap grooming |
 
 ### Reference

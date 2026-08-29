@@ -3,8 +3,8 @@
 # Runs inside the Armbian image chroot via Packer.
 # Installs the Bitfocus Buttons USB Relay headless .deb that was
 # copied to /tmp/ by the Packer file provisioner, then installs:
-#   - dpx-set-hostname.service  (sets dpx-buttnode-XXXX hostname on first boot)
-#   - dpx-buttnode-ui.service   (device config web UI on port 8080)
+#   - dpx-set-hostname.service  (sets dpx-buttonode-XXXX hostname on first boot)
+#   - dpx-buttonode-ui.service   (device config web UI on port 8080)
 
 set -euo pipefail
 
@@ -35,7 +35,7 @@ fi
 # Verify avahi (mDNS) is enabled so Buttons can discover this relay
 systemctl enable avahi-daemon || true
 
-# ── Dynamic hostname (dpx-buttnode-XXXX) ──────────────────────────────────────
+# ── Dynamic hostname (dpx-buttonode-XXXX) ──────────────────────────────────────
 # Install the set-hostname script that was copied into the image by Packer.
 # Reads MAC from /sys/class/net (sysfs — always available at boot, before any
 # network stack starts) and sets hostname once. Marker file prevents re-runs.
@@ -45,8 +45,8 @@ install -m 0755 /tmp/dpx-set-hostname.sh /usr/local/bin/dpx-set-hostname.sh
 
 cat > /etc/systemd/system/dpx-set-hostname.service << 'UNIT'
 [Unit]
-Description=Set unique hostname from device MAC address (dpx-buttnode-XXXX)
-Documentation=https://github.com/dubpixel/dpx_buttnode
+Description=Set unique hostname from device MAC address (dpx-buttonode-XXXX)
+Documentation=https://github.com/dubpixel/dpx_buttonode
 After=local-fs.target
 Before=network.target avahi-daemon.service
 
@@ -64,21 +64,50 @@ UNIT
 systemctl enable dpx-set-hostname.service
 echo "==> dpx-set-hostname.service: enabled"
 
-# ── dpx-buttnode-ui (device config web UI on port 8080) ─────────────────────
-echo "==> Installing dpx-buttnode-ui"
+# ── First-boot SSH password (SSH itself stays disabled — see main shell
+# provisioner) ───────────────────────────────────────────────────────────
+# Runs after dpx-set-hostname since ordering doesn't matter between them,
+# but both need to be done well before anyone could plausibly reach the
+# web UI or a deck.
+echo "==> Installing dpx-init-ssh"
 
-install -m 0755 /tmp/dpx-buttnode-ui.py /usr/local/bin/dpx-buttnode-ui.py
+install -m 0755 /tmp/dpx-init-ssh.sh /usr/local/bin/dpx-init-ssh.sh
+
+cat > /etc/systemd/system/dpx-init-ssh.service << 'UNIT'
+[Unit]
+Description=Generate a random per-device root password on first boot
+Documentation=https://github.com/dubpixel/dpx_buttonode
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/dpx-init-ssh.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl enable dpx-init-ssh.service
+echo "==> dpx-init-ssh.service: enabled"
+
+# ── dpx-buttonode-ui (device config web UI on port 8080) ─────────────────────
+echo "==> Installing dpx-buttonode-ui"
+
+install -m 0755 /tmp/dpx-buttonode-ui.py /usr/local/bin/dpx-buttonode-ui.py
 install -m 0644 /tmp/fav_icon.png     /usr/local/bin/fav_icon.png
 
-cat > /etc/systemd/system/dpx-buttnode-ui.service << 'UNIT'
+cat > /etc/systemd/system/dpx-buttonode-ui.service << 'UNIT'
 [Unit]
-Description=DPX Buttnode UI — device configuration web interface (port 8080)
-Documentation=https://github.com/dubpixel/dpx_buttnode
+Description=DPX Buttonode UI — device configuration web interface (port 8080)
+Documentation=https://github.com/dubpixel/dpx_buttonode
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /usr/local/bin/dpx-buttnode-ui.py
+ExecStart=/usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py
 Restart=on-failure
 RestartSec=5
 User=root
@@ -87,22 +116,22 @@ User=root
 WantedBy=multi-user.target
 UNIT
 
-systemctl enable dpx-buttnode-ui.service
-echo "==> dpx-buttnode-ui.service: enabled (port 8080)"
+systemctl enable dpx-buttonode-ui.service
+echo "==> dpx-buttonode-ui.service: enabled (port 8080)"
 
-# ── Advertise dpx-buttnode-ui via mDNS (_dpx-buttnode._tcp) ─────────────────
-# This allows `avahi-browse _dpx-buttnode._tcp` to discover all units on the LAN
+# ── Advertise dpx-buttonode-ui via mDNS (_dpx-buttonode._tcp) ─────────────────
+# This allows `avahi-browse _dpx-buttonode._tcp` to discover all units on the LAN
 # and powers the Nodes tab in the web UI.
-echo "==> Registering _dpx-buttnode._tcp mDNS service"
+echo "==> Registering _dpx-buttonode._tcp mDNS service"
 
 mkdir -p /etc/avahi/services
-cat > /etc/avahi/services/dpx-buttnode-ui.service << 'XML'
+cat > /etc/avahi/services/dpx-buttonode-ui.service << 'XML'
 <?xml version="1.0" standalone='no'?>
 <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
 <service-group>
-  <name replace-wildcards="yes">DPX Buttnode %h</name>
+  <name replace-wildcards="yes">DPX Buttonode %h</name>
   <service>
-    <type>_dpx-buttnode._tcp</type>
+    <type>_dpx-buttonode._tcp</type>
     <port>8080</port>
   </service>
 </service-group>

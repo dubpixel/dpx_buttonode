@@ -1,0 +1,47 @@
+# dpx_buttonode test infra — runs on a shared dev droplet alongside other
+# projects. Always deploy with `-p dpx-buttonode` (see README.md) so this
+# stack's containers/network/volumes stay namespaced and `docker compose
+# down` never touches anything belonging to another project on the box.
+#
+# Host ports are intentionally non-default (18000/26622/13040 instead of
+# 8000/16622/3040) to reduce the odds of colliding with whatever else is
+# already bound on the shared droplet — confirm free ports before first
+# deploy (`ss -ltn`) and adjust here if any of these are already taken,
+# updating README.md to match.
+
+services:
+  companion:
+    build:
+      context: ./companion
+    container_name: dpx-buttonode-companion
+    restart: unless-stopped
+    ports:
+      - "18000:8000"     # web UI
+      - "26622:16622"    # satellite protocol
+    volumes:
+      # /etc/companion/config.yaml is where launch.sh points
+      # COMPANION_CONFIG_FILE — confirmed from companion-pi's own
+      # launch.sh. Persisting it means surface connections/config survive
+      # a container rebuild.
+      - companion-config:/etc/companion
+    networks:
+      - dpx-buttonode-test
+
+  buttons:
+    build:
+      context: ./buttons
+    platform: linux/arm64   # see buttons/Dockerfile — mirror .deb is arm64-only
+    container_name: dpx-buttonode-buttons
+    restart: unless-stopped
+    ports:
+      - "13040:3040"
+    networks:
+      - dpx-buttonode-test
+
+networks:
+  dpx-buttonode-test:
+    name: dpx-buttonode-test
+
+volumes:
+  companion-config:
+    name: dpx-buttonode-companion-config

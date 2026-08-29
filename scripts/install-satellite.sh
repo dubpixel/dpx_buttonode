@@ -2,7 +2,7 @@
 # install-satellite.sh
 # Runs inside the Armbian image chroot via Packer.
 # Installs Companion Satellite (headless) using the official install script,
-# then disables it by default. Mode switching is handled by dpx-buttnode-ui.
+# then disables it by default. Mode switching is handled by dpx-buttonode-ui.
 #
 # Satellite service name: satellite
 # Satellite REST API:     http://localhost:9999/api/config
@@ -29,11 +29,32 @@ rm -f /tmp/satellite-official-install.sh
 
 echo "==> Companion Satellite installed"
 
-# ── Disable by default ────────────────────────────────────────────────────────
-# Only one of buttons/satellite runs at a time. Default mode is Buttons.
-# dpx-buttnode-ui Mode tab handles enable/disable at runtime.
-systemctl disable satellite
-echo "==> satellite.service: installed but DISABLED (default mode: buttons)"
+# ── Install the on-device update script ───────────────────────────────────────
+# Invoked by dpx-buttonode-ui.py's Updates tab (apply_component_update()) via
+# systemd-run --no-block. See scripts/update-satellite.sh for why this is a
+# separate script rather than a re-run of this one.
+install -m 0755 /tmp/update-satellite.sh /usr/local/bin/update-satellite.sh
+echo "==> update-satellite.sh installed to /usr/local/bin"
+
+# ── Default mode: Satellite ────────────────────────────────────────────────────
+# Only one of buttons/satellite/companion runs at a time. Default mode is
+# Companion Satellite, not Buttons — most units are meant to sit in a
+# Companion-driven setup out of the box; Buttons is the opt-in mode now.
+# The Buttons .deb's own postinst auto-enables+starts
+# bitfocus-buttons-usb-relay.service — undo that here since this script
+# runs after install-buttons.sh and is where the real default gets decided.
+# dpx-buttonode-ui Mode tab handles enable/disable at runtime either way.
+# --now (stop) is meaningless during image build (nothing is actually
+# running in the chroot) and newer systemd (Raspberry Pi OS Trixie) hard-
+# refuses --now with no PID 1 running, unlike Armbian's older systemd which
+# silently no-ops it -- confirmed live 2026-08-29, killed the whole Packer
+# build with exit 1. Plain disable is all that's needed: it just removes
+# the enable symlink so the .deb's postinst auto-start doesn't survive
+# into the shipped image.
+systemctl disable bitfocus-buttons-usb-relay
+systemctl enable satellite
+echo "==> satellite.service: enabled (default mode)"
+echo "==> bitfocus-buttons-usb-relay.service: disabled (opt-in via Mode tab)"
 
 # ── Fix HID device permissions ────────────────────────────────────────────────
 # The Buttons USB Relay package owns /dev/hidraw* via udev GROUP="buttons".
@@ -43,13 +64,13 @@ usermod -aG buttons satellite
 echo "==> satellite user added to 'buttons' group (HID device access)"
 
 # ── Write mode persistence file ───────────────────────────────────────────────
-echo "buttons" > /etc/dpx-mode
-echo "==> /etc/dpx-mode: buttons (default)"
+echo "satellite" > /etc/dpx-mode
+echo "==> /etc/dpx-mode: satellite (default)"
 
 # ── Record satellite version in build metadata ────────────────────────────────
 SAT_VERSION=$(/opt/fnm/aliases/default/bin/node -e \
   "console.log(require('/opt/companion-satellite/satellite/package.json').version)" 2>/dev/null || echo "unknown")
-echo "SATELLITE_VERSION=${SAT_VERSION}" >> /etc/dpx-buttnode-release
+echo "SATELLITE_VERSION=${SAT_VERSION}" >> /etc/dpx-buttonode-release
 echo "==> Satellite version: ${SAT_VERSION}"
 
 # ── Verify install ────────────────────────────────────────────────────────────
@@ -60,5 +81,7 @@ else
     echo "==> Run 'sudo satellite-update' on the device to recover"
 fi
 
-systemctl is-enabled satellite.service 2>/dev/null && echo "==> Service: enabled (unexpected)" \
-    || echo "==> Service: disabled (correct)"
+systemctl is-enabled satellite.service 2>/dev/null && echo "==> Service: enabled (correct)" \
+    || echo "==> Service: disabled (unexpected)"
+systemctl is-enabled bitfocus-buttons-usb-relay.service >/dev/null 2>&1 && echo "==> WARNING: bitfocus-buttons-usb-relay still enabled" \
+    || echo "==> bitfocus-buttons-usb-relay.service: disabled (correct)"

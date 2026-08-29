@@ -133,6 +133,7 @@ jobs:
             -var "git_commit=$(echo '${{ github.sha }}' | cut -c1-7)" \
             -var "build_date=$(date -u +%Y-%m-%d)" \
             -var "variant=${{ inputs.variant || 'lite' }}" \
+            -var 'image_mounts=["/boot","/"]' \
             dpx-buttonode.pkr.hcl
 
       # ── Compress and upload ────────────────────────────────────────────────
