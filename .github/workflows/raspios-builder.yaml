@@ -70,7 +70,7 @@ jobs:
         run: |
           VERSION=$(cat artifacts/buttons-version.txt)
           BUILD_VERSION=$(cat VERSION)
-          BOARD="rpi"
+          BOARD="rpi4-5"
           RAW_BRANCH="${{ github.ref_name }}"
           BRANCH_SLUG=$(echo "$RAW_BRANCH" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9._-]|-|g')
           COMMIT=$(echo "${{ github.sha }}" | cut -c1-7)
@@ -145,7 +145,7 @@ jobs:
           IMG="output-dpx-buttonode/dpx-buttonode.img"
           VERSION=$(cat artifacts/buttons-version.txt)
           BUILD_VERSION=$(cat VERSION)
-          BOARD="rpi"
+          BOARD="rpi4-5"
           RAW_BRANCH="${{ github.ref_name }}"
           BRANCH_SLUG=$(echo "$RAW_BRANCH" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9._-]|-|g')
           COMMIT=$(echo "${{ github.sha }}" | cut -c1-7)
