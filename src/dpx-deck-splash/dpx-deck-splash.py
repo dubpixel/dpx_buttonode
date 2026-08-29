@@ -95,6 +95,7 @@ OCTET_STEP_SECONDS = 0.15    # how fast a held octet key spins its value
 UI_SCRIPT = "/usr/local/bin/dpx-buttonode-ui.py"
 MODE_FILE = Path("/etc/dpx-mode")
 COMPANION_DIR = Path("/opt/companion")
+DASHBOARD_UNIT_FILE = Path("/etc/systemd/system/dpx-dashboard.service")
 INITIAL_SSH_PASSWORD_FILE = Path("/etc/dpx-initial-ssh-password")
 MODE_ORDER = ["buttons", "satellite", "companion"]
 MODE_LABELS = {"buttons": "BTN", "satellite": "SAT", "companion": "CMP"}
@@ -160,6 +161,25 @@ def companion_installed():
     """True on Full-variant images. Same check dpx-buttonode-ui.py's own
     companion_installed() makes (COMPANION_DIR.exists())."""
     return COMPANION_DIR.exists()
+
+
+def dashboard_installed():
+    """True if install-dashboard.sh installed the unit on this image —
+    same check dpx-buttonode-ui.py's dashboard_installed() makes."""
+    return DASHBOARD_UNIT_FILE.exists()
+
+
+def dashboard_active():
+    """Read-only systemd query, same pattern as mode_service_active() —
+    a service that's toggled on but crash-looping (e.g. no display
+    attached) reports non-active, not active, so the key reflects
+    reality rather than just "was it toggled on"."""
+    try:
+        return subprocess.run(
+            ["systemctl", "is-active", "--quiet", "dpx-dashboard"]
+        ).returncode == 0
+    except Exception:
+        return False
 
 
 MODE_SERVICE = {
@@ -239,6 +259,8 @@ NET_MODE_COLORS = {
 SUBNET_COLOR = (90, 90, 90)    # neutral gray — a setting, not a mode
 GO_COLOR = (20, 175, 60)       # bright green — the one key that actually does something
 SSH_PW_COLOR = (150, 130, 20)  # amber-brown — the first-boot initial root password, if still active
+DASHBOARD_ON_COLOR = (190, 30, 30)   # red — Dashboard kiosk actually running
+DASHBOARD_OFF_COLOR = (60, 60, 60)   # dark gray — installed but not running
 FLASH_COLOR = (255, 200, 0)    # amber flash — instant "press registered" feedback
 EDIT_COLOR = (0, 170, 190)     # cyan — an octet currently being edited, not yet committed
 DISABLED_FG = (110, 110, 110)  # dimmed text for octets locked while DHCP is staged
@@ -389,6 +411,17 @@ def draw_ssh_key(deck, key):
         deck.set_key_image(key, blank_key(deck))
 
 
+def draw_dashboard_key(deck, key):
+    """Passive status indicator, not a toggle — Dashboard is enabled/
+    disabled from the web UI's Mode tab, not from the deck. Red when
+    actually running, dark gray when installed but off. Only drawn at
+    all when dashboard_installed() — see draw_splash's reserved column."""
+    on = dashboard_active()
+    deck.set_key_image(key, render_key(
+        deck, "D", font_size=16, bg=DASHBOARD_ON_COLOR if on else DASHBOARD_OFF_COLOR
+    ))
+
+
 def draw_splash(deck, ip, mdns_name, state):
     """state = {"mode_pending", "net_pending", "prefix_pending", "ip_edit", "busy"}"""
     rows, cols = deck.key_layout()
@@ -396,7 +429,13 @@ def draw_splash(deck, ip, mdns_name, state):
     mode_key, net_key, subnet_key, ssh_key, go_key = action_key_indices(deck)
     octet_keys = octet_key_indices(deck)
     live_octets = ip.split(".") if ip else []
-    host_row = chunk_hostname(mdns_name, cols) if rows >= 2 else []
+    # Row 1's last column is reserved for the Dashboard status key (only on
+    # Full-variant-style images that actually have it installed) rather than
+    # hostname text — chunk_hostname gets one fewer column to work with in
+    # that case, same graceful-degradation approach as octet_key_indices.
+    show_dashboard_key = dashboard_installed() and rows >= 2
+    host_cols = (cols - 1) if show_dashboard_key else cols
+    host_row = chunk_hostname(mdns_name, host_cols) if rows >= 2 else []
     editable = state["net_pending"] == "static"
 
     for i in range(total):
@@ -415,6 +454,8 @@ def draw_splash(deck, ip, mdns_name, state):
             draw_octet_key(deck, i, c, live_octets, state["ip_edit"], editable)
         elif r == 0 and octet_keys and c == 4:
             deck.set_key_image(i, render_key(deck, f":{PORT}") if live_octets else blank_key(deck))
+        elif r == 1 and show_dashboard_key and c == cols - 1:
+            draw_dashboard_key(deck, i)
         elif r == 1 and c < len(host_row) and host_row[c]:
             deck.set_key_image(i, render_key(deck, host_row[c], font_size=12))
         else:
