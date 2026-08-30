@@ -8,13 +8,13 @@ Port:      8080
 Zero external dependencies — uses Python 3 stdlib only.
 """
 
-import crypt
+import ctypes
+import ctypes.util
 import http.server
 import json
 import os
 import re
 import socket
-import spwd
 import subprocess
 import sys
 import tarfile
@@ -990,18 +990,48 @@ def switch_mode(new_mode):
 # security bar at "you already have root," same as SSH access always was,
 # just reachable through the browser too.
 
+_libcrypt = ctypes.CDLL(ctypes.util.find_library("crypt") or "libcrypt.so.1")
+_libcrypt.crypt.restype = ctypes.c_char_p
+_libcrypt.crypt.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+
+
+def _crypt(password, salt):
+    """Direct binding to the system's real crypt(3) via ctypes — the
+    stdlib `crypt` module was removed in Python 3.13 (PEP 594), which
+    Raspberry Pi OS Trixie ships (Armbian's older base still has it).
+    Hand-rolling a hash algorithm isn't an option here: Debian/Raspberry
+    Pi OS default to yescrypt, not sha512crypt, so only the real libcrypt
+    can verify it correctly regardless of which scheme was used. Confirmed
+    live 2026-08-30 — this was silently crash-looping dpx-buttonode-ui on
+    every Raspberry Pi OS build all session (ModuleNotFoundError on
+    startup), never a boot-sequence problem at all."""
+    result = _libcrypt.crypt(password.encode(), salt.encode())
+    return result.decode() if result else None
+
+
+def _get_shadow_hash(username):
+    """Direct /etc/shadow read — the stdlib `spwd` module was removed in
+    the same Python 3.13 release as `crypt` (same PEP, same batch).
+    Requires root, which this service already runs as."""
+    try:
+        with open("/etc/shadow") as f:
+            for line in f:
+                fields = line.split(":")
+                if fields[0] == username:
+                    return fields[1]
+    except OSError:
+        pass
+    return None
+
+
 def verify_root_password(candidate):
     """True if `candidate` matches root's actual login password, checked
-    against /etc/shadow directly. `crypt` is deprecated (removal targeted
-    for a future Python — not yet gone as of the 3.12 this ships on) but
-    there's no stdlib replacement for "verify a Unix password hash" yet;
-    revisit if/when the target Armbian base moves to a Python without it.
-    """
+    against /etc/shadow directly."""
     try:
-        stored_hash = spwd.getspnam("root").sp_pwdp
+        stored_hash = _get_shadow_hash("root")
         if not stored_hash or stored_hash in ("*", "!", "!!", ""):
             return False  # locked/no-password account — never treat as a match
-        return crypt.crypt(candidate, stored_hash) == stored_hash
+        return _crypt(candidate, stored_hash) == stored_hash
     except Exception:
         return False
 
