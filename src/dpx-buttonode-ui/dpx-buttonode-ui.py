@@ -836,6 +836,7 @@ def dashboard_section():
     <input type="hidden" name="action" value="{action}">
     <button type="submit" class="btn {'btn-w' if on else 'btn-p'}">{label}</button>
   </form>
+  {'<form method="POST" action="/dashboard/fullscreen" style="display:inline"><button type="submit" class="btn">⛶ Toggle Fullscreen</button></form>' if on else ''}
 </div>"""
 
 
@@ -917,6 +918,22 @@ def set_dashboard_enabled(enable):
         run(["systemctl", "enable", "--now", DASHBOARD_SERVICE])
     else:
         run(["systemctl", "disable", "--now", DASHBOARD_SERVICE])
+
+
+def dashboard_toggle_fullscreen():
+    """Synthesize an F11 keypress into the Dashboard kiosk's X session via
+    xdotool. Works because dpx-buttonode-ui and dpx-dashboard both run as
+    root on the same machine — X's -nolisten tcp (in the xinit ExecStart)
+    only blocks *network* X connections, not local ones via DISPLAY=:0.
+    Lets someone toggle fullscreen from the web UI without a keyboard
+    physically attached to the kiosk display."""
+    env = dict(os.environ, DISPLAY=":0")
+    try:
+        r = subprocess.run(["xdotool", "key", "F11"], env=env,
+                            capture_output=True, text=True, timeout=5)
+        return r.returncode == 0, (r.stderr.strip() or "ok")
+    except Exception as e:
+        return False, str(e)
 
 
 def switch_mode(new_mode):
@@ -2010,6 +2027,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             action = params.get("action", "")
             set_dashboard_enabled(action == "enable")
             self.redir("/mode?ok=dashboard")
+
+        # ── /dashboard/fullscreen ───────────────────────────────────────
+        elif path == "/dashboard/fullscreen":
+            if not dashboard_enabled():
+                self.html(render_mode(alert="✗ Dashboard isn't running", alert_cls="a-err"))
+                return
+            ok, msg = dashboard_toggle_fullscreen()
+            if ok:
+                self.redir("/mode?ok=fullscreen")
+            else:
+                self.html(render_mode(alert=f"✗ F11 send failed: {esc(msg)}", alert_cls="a-err"))
 
         # ── /mode ────────────────────────────────────────────────────────
         elif path == "/mode":

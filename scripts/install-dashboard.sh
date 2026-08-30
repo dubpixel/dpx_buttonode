@@ -32,7 +32,7 @@ apt-get update -q
 apt-get install -yq --no-install-recommends \
     xserver-xorg xserver-xorg-video-fbdev xserver-xorg-input-all \
     xserver-xorg-legacy xinit x11-xserver-utils openbox mesa-utils \
-    libgl1-mesa-dri unclutter nodejs npm libcap2-bin
+    libgl1-mesa-dri unclutter nodejs npm libcap2-bin xdotool
 apt-get clean
 
 # Belt-and-suspenders: force the boot target back to multi-user.target
