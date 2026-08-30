@@ -125,6 +125,33 @@ build {
   # System configuration (hostname, first-login cleanup, SSH)
   provisioner "shell" {
     inline = [
+      # Stub out update-initramfs for the whole chroot session, BEFORE any
+      # apt-get install runs anywhere in this build. Root cause of a real,
+      # already-confirmed boot failure in the sibling dpx_openPanel project
+      # (same Packer arm-image + qemu chroot toolchain): some package's
+      # postinst hook triggers dpkg's initramfs-tools trigger, which runs
+      # `update-initramfs` and Raspberry Pi OS's own hook then copies the
+      # result straight into the FAT32 boot partition. That's a ~50MB write
+      # into a small FAT32 filesystem via QEMU-emulated I/O inside the
+      # chroot, and it can corrupt the filesystem badly enough that the
+      # Pi's bootloader can't read the boot partition on real hardware --
+      # even though the resulting image still passes fsck.fat and a manual
+      # MBR check, and the build itself reports success. This device
+      # doesn't use or need an initramfs for normal SD boot, so stubbing
+      # the hook out is safe -- same technique pi-gen (the tool Raspberry
+      # Pi OS itself is built with) uses, for the same reason. Suspected
+      # root cause of inconsistent real-hardware boot stalls seen
+      # 2026-08-29/30 on real Pi 4 (different symptom each time -- cloud-init
+      # target, graphical.target, multi-user.target with SSH also
+      # unreachable -- consistent with filesystem corruption rather than
+      # one specific service bug, since the targeted fixes for each
+      # individual symptom didn't actually resolve the underlying stall).
+      "cat > /usr/sbin/update-initramfs << 'STUB'",
+      "#!/bin/sh",
+      "exit 0",
+      "STUB",
+      "chmod +x /usr/sbin/update-initramfs",
+
       # Disable Armbian first-login prompt
       "rm -f /root/.not_logged_in_yet",
 
