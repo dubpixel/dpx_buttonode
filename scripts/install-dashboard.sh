@@ -20,12 +20,27 @@ echo "==> Installing Companion Dashboard (opt-in kiosk display)"
 # ── Dependencies ────────────────────────────────────────────────────────────
 # X11 + minimal window manager + Electron's runtime deps. avahi-daemon is
 # already installed elsewhere in the pipeline.
+#
+# --no-install-recommends is required here -- without it, apt pulls in a
+# default display manager as a Recommends dependency of xserver-xorg, and
+# that package's postinst commonly enables itself AND flips the system's
+# default systemd target from multi-user.target to graphical.target.
+# Confirmed live 2026-08-29 on real Pi 4 hardware: a Lite-variant image
+# should never reach graphical.target at all, but did -- boot stalled
+# there with every service (including dpx-buttonode-ui) unreachable.
 apt-get update -q
-apt-get install -yq \
+apt-get install -yq --no-install-recommends \
     xserver-xorg xserver-xorg-video-fbdev xserver-xorg-input-all \
     xserver-xorg-legacy xinit x11-xserver-utils openbox mesa-utils \
     libgl1-mesa-dri unclutter nodejs npm libcap2-bin
 apt-get clean
+
+# Belt-and-suspenders: force the boot target back to multi-user.target
+# regardless of what any package's postinst did. Dashboard's own X
+# session is launched directly by dpx-dashboard.service via xinit (see
+# the systemd unit below) -- it does not need or want the system's
+# default target to be graphical.target at all.
+systemctl set-default multi-user.target
 
 echo "==> Dependencies installed"
 
