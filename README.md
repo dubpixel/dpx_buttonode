@@ -39,14 +39,17 @@
     <img src="images/logo.png" alt="Logo" height="120">
   </a>
 <h1 align="center">dpx-buttonode</h1>
-<h3 align="center"><i>Flash-ready Armbian images for <a href="https://bitfocus.io/companion">Bitfocus Companion</a> — turn any ARM SBC into a <a href="https://github.com/bitfocus/companion-satellite">Companion Satellite</a> node (or run full Companion itself), switchable at runtime</i></h3>
+<h3 align="center"><i>Flash-ready images for <a href="https://bitfocus.io/companion">Bitfocus Companion</a> — turn any ARM SBC (or a real Raspberry Pi 4/5) into a <a href="https://github.com/bitfocus/companion-satellite">Companion Satellite</a> node (or run full Companion itself), switchable at runtime</i></h3>
   <p align="center">
-    Automated GitHub Actions build pipeline that produces ready-to-flash <code>.img.gz</code> images
-    for ARM single-board computers (Rock Pi S, Orange Pi Zero, etc.) that boot straight into
+    Automated GitHub Actions build pipeline that produces ready-to-flash <code>.img.gz</code> images —
+    for ARM single-board computers (Rock Pi S, Orange Pi Zero, etc.) via Armbian, and for real
+    <strong>Raspberry Pi 4/5</strong> via the official Raspberry Pi OS — that boot straight into
     <a href="https://github.com/bitfocus/companion-satellite">Bitfocus Companion Satellite</a> —
     or, on the Full image variant, run full <a href="https://bitfocus.io/companion">Bitfocus Companion</a> itself.
     <a href="https://bitfocus.io/buttons">Bitfocus Buttons USB Relay</a> is also supported as a third mode.
     Switch between modes from the browser — no re-flash needed.
+    An opt-in <strong>Companion Dashboard</strong> kiosk display can run alongside any mode on units with a
+    screen attached.
     Write the image, plug in your Stream Deck, power on — done.
     <br /><br />
      »  
@@ -102,14 +105,22 @@ This project extends the architecture of <a href="https://github.com/elliotmatso
 to run on ARM single-board computers that aren't Raspberry Pis — turning any supported board into a
 <strong>Bitfocus Companion Satellite</strong> node (or a full <strong>Bitfocus Companion</strong> instance, on the Full image
 variant) out of the box. <strong>Bitfocus Buttons USB Relay</strong> is also supported as a third mode, for boards
-dedicated to driving a physical USB relay instead.
+dedicated to driving a physical USB relay instead. An opt-in <strong>Companion Dashboard</strong> kiosk display can
+run alongside any of the three modes on units with a screen attached.
 
-The build pipeline is fully automated via GitHub Actions:
+Real Raspberry Pi 4/5 hardware runs on a separate, parallel pipeline using the <strong>official Raspberry Pi
+OS</strong> — not Armbian. Armbian's own `rpi4b`/`rpi5b` board entries exist but are secondary support for
+boards it isn't actually built around (Rockchip/Allwinner/Amlogic); real Pi hardware gets the Pi
+Foundation's own first-class OS instead, which matters especially for GPU/HDMI/VideoCore (Dashboard's
+display output).
+
+The build pipeline is fully automated via GitHub Actions, with two parallel base-OS sources feeding the
+same customization stage:
 <ol>
-  <li>The Armbian build framework compiles a minimal Ubuntu Noble (24.04) base image for the target board.</li>
-  <li>HashiCorp Packer chroots into the image, installs Companion Satellite from source via the official install script,
+  <li><strong>Armbian boards:</strong> the Armbian build framework compiles a minimal Ubuntu Noble (24.04) base image for the target board. <strong>Raspberry Pi 4/5:</strong> the official Raspberry Pi OS Lite (64-bit) image is downloaded directly from Raspberry Pi's own release manifest (the same one Raspberry Pi Imager uses) — one universal image covers both Pi 4 and Pi 5.</li>
+  <li>HashiCorp Packer chroots into the image (identical customization stage regardless of which OS produced it), installs Companion Satellite from source via the official install script,
   installs Bitfocus Buttons USB Relay from this repo's <code>buttons-deb-mirror</code> release (maintained manually — no
-  Bitfocus account or secrets needed in CI), and — on the Full variant — installs full Bitfocus Companion itself.
+  Bitfocus account or secrets needed in CI), and — on the Full variant — installs full Bitfocus Companion itself, plus the opt-in Companion Dashboard kiosk.
   All modes are installed; <strong>Companion Satellite is the default active mode</strong>, switchable to Buttons or
   Companion at runtime with no re-flash.</li>
   <li>On first boot, <code>dpx-set-hostname.service</code> reads the board's Ethernet MAC address from sysfs and permanently sets the hostname to <code>dpx-buttonode-XXXX</code> (last 4 hex chars, e.g. <code>dpx-buttonode-C833</code>).</li>
@@ -129,11 +140,13 @@ A daily scheduled workflow checks whether the mirror release has a version that 
 
 ### Built With
 
-* [Armbian Build Framework](https://github.com/armbian/build) — base Linux image for ARM SBCs
+* [Armbian Build Framework](https://github.com/armbian/build) — base Linux image for non-Pi ARM SBCs
+* [Raspberry Pi OS](https://www.raspberrypi.com/software/) — base image for real Raspberry Pi 4/5 hardware
 * [HashiCorp Packer](https://www.packer.io/) + [arm-image plugin](https://github.com/solo-io/packer-plugin-arm-image) — chroot image customization
 * [GitHub Actions](https://github.com/features/actions) — CI/CD build, scheduling, and release publishing
 * [Bitfocus Buttons USB Relay (headless)](https://bitfocus.io/buttons) — USB relay mode
 * [Bitfocus Companion Satellite](https://github.com/bitfocus/companion-satellite) — Companion satellite mode
+* [Companion Dashboard](https://github.com/tomhillmeyer/companion-dashboard) — opt-in kiosk display mode
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 <!-- GETTING STARTED -->
 
@@ -150,13 +163,15 @@ A daily scheduled workflow checks whether the mirror release has a version that 
 
 The following boards are built **automatically** on every new Buttons release and published to [Releases](https://github.com/dubpixel/dpx_buttonode/releases):
 
-| Board | Armbian ID |
-|---|---|
-| [Rock Pi S](https://wiki.radxa.com/RockpiS) — [buy](https://shop.allnetchina.cn/products/rock-pi-s) | `rockpi-s` |
-| [Orange Pi Zero 3](http://www.orangepi.org/html/hardWare/computerAndMicrocontrollers/details/Orange-Pi-Zero-3.html) — [buy](https://www.aliexpress.com/item/1005005466373794.html) | `orangepizero3` |
-| [Rock Pi 4B](https://wiki.radxa.com/Rockpi4) | `rockpi-4b` |
-| [Rock Pi 4B+](https://wiki.radxa.com/Rockpi4) | `rockpi-4bplus` |
-| [Rock Pi S0](https://radxa.com/products/rockpi/s0) | `rock-s0` |
+| Board | Base OS | ID |
+|---|---|---|
+| [Rock Pi S](https://wiki.radxa.com/RockpiS) — [buy](https://shop.allnetchina.cn/products/rock-pi-s) | Armbian | `rockpi-s` |
+| [Orange Pi Zero 3](http://www.orangepi.org/html/hardWare/computerAndMicrocontrollers/details/Orange-Pi-Zero-3.html) — [buy](https://www.aliexpress.com/item/1005005466373794.html) | Armbian | `orangepizero3` |
+| [Rock Pi 4B](https://wiki.radxa.com/Rockpi4) | Armbian | `rockpi-4b` |
+| [Rock Pi 4B+](https://wiki.radxa.com/Rockpi4) | Armbian | `rockpi-4bplus` |
+| [Rock Pi S0](https://radxa.com/products/rockpi/s0) | Armbian | `rock-s0` |
+| **Raspberry Pi 4** — [buy](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/) | **Official Raspberry Pi OS** (not Armbian) | one universal image, no board matrix |
+| **Raspberry Pi 5** — [buy](https://www.raspberrypi.com/products/raspberry-pi-5/) | **Official Raspberry Pi OS** (not Armbian) | same image as Pi 4 |
 
 #### Recommended accessories
 
@@ -186,6 +201,8 @@ Each release ships two variants — pick one:
 ```
 rockpi-s-dpx-buttonode-<version>-lite.img.gz
 rockpi-s-dpx-buttonode-<version>-full.img.gz
+rpi4-5-dpx-buttonode-<version>-lite.img.gz     # real Raspberry Pi 4/5
+rpi4-5-dpx-buttonode-<version>-full.img.gz     # real Raspberry Pi 4/5
 ```
 
 #### 2. Flash to SD card
@@ -328,14 +345,18 @@ http://dpx-buttonode-XXXX.local:8080
   <img src="images/006_mode.jpe" alt="Mode tab" width="480">
 </div>
 
+A persistent status bar (version, active mode, live RAM — color-coded) shows across every tab, not just Status.
+
 | Tab | What it does |
 |---|---|
-| **Status** | Hostname, IP, MAC, network mode, **current mode + active service status**, mDNS health, USB devices |
+| **Status** | Hostname, IP, MAC, network mode, **current mode + active service status**, mDNS health, USB devices, uptime, RAM |
 | **Hostname** | Change the device hostname — applies immediately and persists across reboots |
 | **Network** | Switch between DHCP and static IP. Survives reboots. |
 | **Devices** | USB device list, Stream Deck USB power cycle, Buttons service restart |
 | **Nodes** | Discover all other `dpx-buttonode-*` units on the LAN with links to each web UI |
-| **Mode** | Switch between Buttons and Satellite. Configure Companion server IP + port for Satellite mode. |
+| **Mode** | Switch between Buttons, Satellite, and Companion. Configure Companion server IP + port for Satellite mode. **Companion Dashboard** toggle (opt-in kiosk display, if installed) with a **Toggle Fullscreen** button — sends F11 into the running kiosk, no keyboard needed. |
+| **SSH** | Enable/disable SSH, change the root password. Every action requires the current root password — see [SSH into the device](#ssh-into-the-device) below. |
+| **Updates** | Check and apply updates for the web UI, Buttons, Satellite, and Companion in place |
 
 > **Note:** The Network tab writes directly to `/etc/systemd/network/` and restarts `systemd-networkd`. After an IP change, navigate to the new address — the hostname (`dpx-buttonode-XXXX.local`) resolves correctly via mDNS within a few seconds.
 
@@ -516,14 +537,21 @@ dns-sd -B _dpx-buttonode._tcp local     # macOS
 <!-- ROADMAP -->
 
 - [x] Core Armbian + Packer two-stage build pipeline
+- [x] Real Raspberry Pi OS build pipeline for Pi 4/5 (parallel to Armbian, not a substitute)
 - [x] Self-hosted package mirror via GitHub Releases (no Bitfocus secrets in CI)
 - [x] Matrix builds for Orange Pi Zero family
 - [x] Daily automated version check + GitHub Release publishing
 - [x] `upload-mirror.sh` helper for one-command package updates
 - [x] Dynamic MAC-derived hostname (`dpx-buttonode-XXXX`) on first boot
-- [x] `dpx-buttonode-ui` — device config web UI on port 8080 (hostname, network, devices, node discovery)
-- [x] Companion Satellite A/B mode — both services baked in, switch without re-flash
+- [x] `dpx-buttonode-ui` — device config web UI on port 8080 (hostname, network, devices, node discovery, SSH, updates)
+- [x] Buttons / Satellite / Companion three-way mode — all baked in, switch without re-flash
 - [x] Mode tab in web UI — configure Companion server IP/port, switch modes from browser
+- [x] Stream Deck HID boot splash — stage-then-GO config screen, no web UI/SSH needed for initial setup
+- [x] SSH security overhaul — disabled by default, no hardcoded credential, physical-access-only reveal
+- [x] On-device auto-update system (web UI, Buttons, Satellite, Companion)
+- [x] Companion Dashboard — opt-in kiosk display, F11 fullscreen toggle, deck status key
+- [ ] Set a default Companion Dashboard connection from the web UI ([#8](https://github.com/dubpixel/dpx_buttonode/issues/8))
+- [ ] On-screen keyboard for the Dashboard kiosk ([#9](https://github.com/dubpixel/dpx_buttonode/issues/9))
 - [ ] Additional board support (Banana Pi M2 Zero, NanoPi R4S, Orange Pi 5)
 - [ ] SHA256 checksums attached to each release
 - [ ] WiFi pre-configuration support in image (via Armbian `wpa_supplicant` overlay)
