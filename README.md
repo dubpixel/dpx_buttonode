@@ -244,9 +244,31 @@ gunzip -c rockpi-s-dpx-buttonode-0.1.0-beta.4.img.gz \
 
 > **Hostname:** Each device gets a unique hostname derived from its MAC address: `dpx-buttonode-XXXX.local` where `XXXX` is the last 4 hex characters of the MAC (e.g. `dpx-buttonode-C833.local`). This is stable — the same board always gets the same name.
 
-> **Web UI:** A device config panel runs on port 8080: `http://dpx-buttonode-XXXX.local:8080` — change hostname, switch DHCP/static IP, manage devices, discover other buttonodes, and **switch between Buttons and Satellite mode**.
+> **Web UI:** A device config panel runs on port 8080: `http://dpx-buttonode-XXXX.local:8080` — change hostname, switch DHCP/static IP, manage devices, discover other buttonodes, and **switch between Buttons, Satellite, and Companion mode**.
 
 > **SSH:** disabled by default, no hardcoded credential — see [SSH into the device](#ssh-into-the-device) below.
+
+#### Stream Deck config screen
+
+Before any mode claims the device, the attached Stream Deck itself becomes a stage-then-GO config
+screen — no web UI or SSH needed for initial setup:
+
+<div align="center">
+  <img src="images/009_deck_splash.png" alt="Stream Deck config screen" width="600">
+</div>
+
+- **MODE** cycles the *pending* selection through Buttons → Satellite → Companion (color-coded, skips
+  Companion if not installed)
+- **NET** toggles staged DHCP ↔ static
+- **SUBNET** cycles `/24 /22 /16 /8`
+- Holding an **octet** key spins its value (locked unless NET is staged to static)
+- **D** (if Dashboard is installed) is a passive status indicator — red when Dashboard is actually
+  running, gray when installed but off
+- **SSH** (press-to-toggle) reveals the first-boot random root password — see
+  [SSH into the device](#ssh-into-the-device) below
+- **GO** commits the staged mode + network together as one operation
+
+Nothing is applied until **GO** is pressed — cycling MODE/NET/SUBNET only changes what's staged.
 
 ---
 
