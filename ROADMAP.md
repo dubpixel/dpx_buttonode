@@ -67,6 +67,7 @@ From any buttonode's web UI, show all other buttonodes visible on the local netw
   a real gap the code review hadn't caught: disabling only `ssh.service` left SSH fully reachable the
   entire time via Ubuntu's `ssh.socket` (socket activation starts `ssh.service` on demand regardless of its
   own disabled state) — fixed in both the Packer provisioning and the web UI's toggle.
+- [ ] **Investigate: unexplained SSH-enabled state found on a genuinely fresh rockpi-s flash (2026-08-30).** Build-time provisioning, first-boot scripts, and unauthenticated-toggle theories have all been checked and ruled out with evidence (see AGENTS.md gotcha #26) — root cause still unknown. Needs a device with SSH/console access from first boot to actually catch the moment it flips, rather than reasoning about it after the fact.
 - [ ] First-boot wizard (hostname confirmation, mode selection: Buttons vs Satellite)
 - [ ] `/status` JSON endpoint for scripting/monitoring
 - [ ] Make `full` variant opt-in on automated releases — add `build-full` boolean input to `release-action.yaml` so the full image is only built when explicitly requested, not on every Buttons version bump (currently doubles CI time)
