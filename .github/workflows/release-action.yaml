@@ -17,6 +17,11 @@ on:
         options:
           - 'false'
           - 'true'
+      build-full:
+        description: 'Also build Full variant images (Buttons + Satellite + Companion) -- doubles build time per board'
+        required: false
+        default: false
+        type: boolean
 
   schedule:
     - cron: '0 6 * * *'
@@ -30,8 +35,24 @@ jobs:
     outputs:
       should-build: ${{ steps.compare.outputs.should-build }}
       buttons-version: ${{ steps.mirror.outputs.buttons-version }}
+      variants: ${{ steps.variants.outputs.variants }}
 
     steps:
+      - name: Compute variant list
+        id: variants
+        env:
+          BUILD_FULL: ${{ github.event.inputs.build-full || 'false' }}
+        run: |
+          # Cron (schedule trigger) and manual dispatch with build-full=false
+          # both only build 'lite' -- doubling CI time on every automated
+          # Buttons version bump was the actual problem this solves. 'full'
+          # is opt-in via workflow_dispatch's build-full checkbox.
+          if [[ "$BUILD_FULL" == "true" ]]; then
+            echo 'variants=["lite","full"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'variants=["lite"]' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Read version from mirror release asset filename
         id: mirror
         env:
@@ -91,8 +112,9 @@ jobs:
           fi
 
   # ── Matrix build across all supported boards ──────────────────────────────
-  # TODO: make 'full' optional — add a 'build-full' boolean input so full images
-  # are opt-in per release rather than always built (doubles CI time).
+  # 'full' is opt-in via workflow_dispatch's build-full checkbox (issue #4) --
+  # the daily cron only builds 'lite', so a routine Buttons version bump
+  # doesn't double CI time building Full images nobody asked for this round.
   build:
     needs: check-version
     if: needs.check-version.outputs.should-build == 'true'
@@ -102,9 +124,7 @@ jobs:
         board:
           - rockpi-s
           - orangepizero3
-        variant:
-          - lite
-          - full
+        variant: ${{ fromJSON(needs.check-version.outputs.variants) }}
     uses: ./.github/workflows/armbian-builder.yaml
     with:
       armbian-board: ${{ matrix.board }}
