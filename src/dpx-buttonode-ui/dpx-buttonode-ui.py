@@ -2151,6 +2151,14 @@ if __name__ == "__main__":
         ok, msg = pin_static(sys.argv[2])
         print(msg)
         sys.exit(0 if ok else 1)
+    if len(sys.argv) >= 2 and sys.argv[1] == "--toggle-dashboard":
+        if not dashboard_installed():
+            print("Dashboard is not installed on this image")
+            sys.exit(1)
+        new_state = not dashboard_enabled()
+        set_dashboard_enabled(new_state)
+        print("Dashboard enabled" if new_state else "Dashboard disabled")
+        sys.exit(0)
 
     # Crash-recovery: a self-update that compiles fine but throws before
     # the server ever binds would otherwise restart-loop forever under

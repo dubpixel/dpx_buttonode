@@ -411,11 +411,22 @@ def draw_ssh_key(deck, key):
         deck.set_key_image(key, blank_key(deck))
 
 
+def dashboard_key_index(deck):
+    """Key index for the Dashboard status/toggle key, or None if this image
+    doesn't have Dashboard installed or the deck has fewer than 2 rows —
+    same graceful-degradation approach as action_key_indices()/
+    octet_key_indices(). Row 1, last column (see draw_splash's reserved
+    column note)."""
+    rows, cols = deck.key_layout()
+    if not dashboard_installed() or rows < 2:
+        return None
+    return cols + (cols - 1)  # row 1, last column
+
+
 def draw_dashboard_key(deck, key):
-    """Passive status indicator, not a toggle — Dashboard is enabled/
-    disabled from the web UI's Mode tab, not from the deck. Red when
-    actually running, dark gray when installed but off. Only drawn at
-    all when dashboard_installed() — see draw_splash's reserved column."""
+    """Red when Dashboard is actually running, dark gray when installed
+    but off. Press-to-toggle (see on_key) — this only draws the current
+    state, doesn't decide it."""
     on = dashboard_active()
     deck.set_key_image(key, render_key(
         deck, "D", font_size=16, bg=DASHBOARD_ON_COLOR if on else DASHBOARD_OFF_COLOR
@@ -606,6 +617,7 @@ def make_key_callback(state):
     def on_key(deck, key, pressed):
         now = time.monotonic()
         mode_key, net_key, subnet_key, ssh_key, go_key = action_key_indices(deck)
+        dashboard_key = dashboard_key_index(deck)
         octet_keys = octet_key_indices(deck)
 
         if ssh_key is not None and key == ssh_key:
@@ -668,7 +680,27 @@ def make_key_callback(state):
             deck.set_key_image(key, render_key(deck, "GO ✓", font_size=15, bg=FLASH_COLOR))
             threading.Thread(target=execute_staged, args=(deck, key, state), daemon=True).start()
 
+        elif dashboard_key is not None and key == dashboard_key:
+            if state.get("dashboard_busy"):
+                return  # a previous toggle is still in flight — ignore
+            state["dashboard_busy"] = True
+            deck.set_key_image(key, render_key(deck, "D", font_size=16, bg=FLASH_COLOR))
+            threading.Thread(target=toggle_dashboard, args=(deck, key, state), daemon=True).start()
+
     return on_key
+
+
+def toggle_dashboard(deck, key, state):
+    """Runs in a background thread (same reason as execute_staged — enable/
+    disable --now can take a few seconds starting X11/Electron, don't block
+    the HID callback). Unlike GO, toggling Dashboard never kills this
+    process (no Conflicts= on dpx-dashboard.service), so it's safe to just
+    redraw the key with the real state once the privileged call returns."""
+    try:
+        run_privileged(["--toggle-dashboard"])
+    finally:
+        state["dashboard_busy"] = False
+        draw_dashboard_key(deck, key)
 
 
 def run_splash_loop():

@@ -124,6 +124,7 @@ dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui
 dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --apply-mode companion
 dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --toggle-net
 dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --pin-static [0-9]*.[0-9]*.[0-9]*.[0-9]*
+dpx-splash ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/bin/dpx-buttonode-ui.py --toggle-dashboard
 SUDOERS
 chmod 0440 /etc/sudoers.d/dpx-splash
 visudo -cf /etc/sudoers.d/dpx-splash
