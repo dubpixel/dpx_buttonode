@@ -56,6 +56,31 @@ From any buttonode's web UI, show all other buttonodes visible on the local netw
 
 ---
 
+## Raspberry Pi OS Pipeline (Pi 4/5)
+**Status:** shipped, hardware-validated 2026-08-30 (`.github/workflows/raspios-builder.yaml`) `- [x]` pipeline / `- [x]` hardware test
+
+Real Pi 4/5 hardware gets the official Raspberry Pi OS Lite (64-bit) image, downloaded directly from Raspberry Pi's own release manifest — never Armbian's `rpi4b`/`rpi5b` dropdown entries, which are secondary support for boards Armbian isn't actually built around. Feeds into the same `dpx-buttonode.pkr.hcl` chroot stage the Armbian pipeline uses; one universal image covers both Pi 4 and Pi 5, no board matrix needed.
+
+Six real bugs found and fixed live on real hardware getting this working — most were boot-sequence issues specific to Raspberry Pi OS (`userconfig.service`'s interactive wizard, cloud-init, a display-manager pulling in `graphical.target`, `adduser --group`, `systemctl --now` failing in the Packer chroot on Trixie's newer systemd) but the actual root cause of "web UI never comes up" turned out to be none of those — Python 3.13 (Trixie's version) removed the stdlib `crypt`/`spwd` modules the web UI's password verification depended on, silently crash-looping it the entire time. See AGENTS.md gotchas #17-25 for full detail on each.
+
+- [ ] Publish a public release for Pi 4/5 alongside the existing Armbian board releases
+- [ ] Extend `release-action.yaml`'s daily matrix build to include the Pi 4/5 target, not just manual dispatch
+
+---
+
+## Companion Dashboard
+**Status:** shipped, hardware-validated 2026-08-30 (issue #5) `- [x]` code / `- [x]` hardware test
+
+Opt-in kiosk display toggle (`scripts/install-dashboard.sh`, `dpx-dashboard.service`) for `tomhillmeyer/companion-dashboard`, installed on both variants but disabled by default. Toggle lives on the web UI's Mode tab, alongside a **Toggle Fullscreen** button (sends F11 into the kiosk via `xdotool`, confirmed working on real Pi 4 hardware — no keyboard needed at the physical display). A non-blocking warning shows on boards reporting under 1GB RAM rather than hiding the feature outright (confirmed live on rockpi-s, 466MB: correctly warns, correctly fails safe with no crash when enabled anyway — X can't find a screen on that board's SoC). Stream Deck splash gets a red/gray `D` status key reflecting whether Dashboard is genuinely running, not just toggled on.
+
+Two real bugs found fixing this: `dpx-dashboard.service` needed `User=root` (a non-root `User=` systemd service doesn't get real logind/PAM VT console access — same class of bug the sibling `dpx_openPanel` project hit); `apt-get install xserver-xorg` without `--no-install-recommends` pulled in a default display manager that hijacked the whole system's boot target.
+
+- [ ] Issue #8: Set Default Connection — scoped, not implemented. Real finding: Dashboard's connection URL lives in per-window `localStorage`, not a config file — needs either an upstream PR to `companion-dashboard` (a `--default-connection-url` CLI flag) or verifying its existing config-import mechanism works from a launch arg.
+- [ ] Issue #9: on-screen keyboard toggle — scoped, not implemented. Recommends `matchbox-keyboard`, manual-toggle (same pattern as F11), not `onboard`'s auto-show (unreliable inside Electron).
+- [ ] Visual confirmation of Dashboard's actual kiosk rendering on a real HDMI display — hardware testing so far confirmed the service runs/toggles/doesn't crash, not that the UI renders correctly on the 52Pi 1920×440 display this project targets.
+
+---
+
 ## General
 
 - [x] code / [x] hardware test — **Security: SSH exposure, fixed 2026-08-25, hardware-validated

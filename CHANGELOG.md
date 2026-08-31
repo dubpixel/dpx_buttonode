@@ -9,6 +9,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.0] - 2026-08-30
+
+Real Raspberry Pi 4/5 support via a genuine Raspberry Pi OS build pipeline
+(not Armbian), plus an opt-in Companion Dashboard kiosk display feature —
+both hardware-validated with a string of real bugs found and fixed live,
+one of which (a Python 3.13 stdlib removal) was the actual root cause
+behind most of this pass's hardware debugging.
+
+### Added
+- **Real Raspberry Pi OS build pipeline** (`.github/workflows/raspios-builder.yaml`)
+  for Pi 4/5 — downloads the official Raspberry Pi OS Lite (64-bit) image
+  directly from Raspberry Pi's own release manifest and feeds it through the
+  same `dpx-buttonode.pkr.hcl` the Armbian pipeline uses. Armbian stays for
+  the non-Pi board families it's actually built for; real Pi hardware never
+  gets Armbian's `rpi4b`/`rpi5b` dropdown entries.
+- **Companion Dashboard** (issue #5): opt-in kiosk display toggle on the web
+  UI's Mode tab. Installs `tomhillmeyer/companion-dashboard` as an X11/
+  Electron kiosk (`scripts/install-dashboard.sh`, `dpx-dashboard.service`),
+  disabled by default. A non-blocking warning shows on boards under 1GB RAM
+  rather than hiding the feature outright. **Toggle Fullscreen** button
+  sends F11 into the running kiosk via `xdotool` — no keyboard needed at the
+  physical display. Stream Deck splash gets a red/gray `D` status key
+  (row 1, last column) reflecting whether Dashboard is actually running.
+- Persistent status bar (version, mode, RAM — color-coded) across every web
+  UI tab, not just Status. Mode badge and status bar both show a `+D` suffix
+  when Dashboard is actually running (not just toggled on).
+- Uptime + RAM cards on the Status tab.
+
+### Fixed
+- **The actual root cause of every Pi 4 "web UI never comes up" symptom
+  this pass: Python 3.13 (Raspberry Pi OS Trixie) removed the stdlib
+  `crypt`/`spwd` modules** (PEP 594) — `dpx-buttonode-ui.py`'s `import crypt`
+  meant the service was silently crash-looping on every single Raspberry Pi
+  OS build, the entire time. Armbian's older Python still has both modules,
+  which is why this never surfaced there. Fixed with a direct `ctypes`
+  binding to the system's real `libcrypt` (still pure stdlib) plus a direct
+  `/etc/shadow` read in place of `spwd`. See AGENTS.md gotcha #25.
+- Raspberry Pi OS's `userconfig.service` interactively prompting for a
+  username on every boot (masked outright — this project's security model
+  never wanted a second non-root account).
+- Raspberry Pi OS shipping cloud-init by default, stalling boot searching
+  for a datasource that will never exist (disabled via its documented
+  marker file).
+- `apt-get install xserver-xorg` (for Dashboard) silently pulling in a
+  default display manager without `--no-install-recommends`, flipping the
+  system's default target to `graphical.target` and taking every service
+  down with it — fixed with `--no-install-recommends` plus an explicit
+  `systemctl set-default multi-user.target`.
+- `adduser --system` needing `--group` to actually get a matching group
+  (broke Dashboard's `chown` on install).
+- `systemctl disable --now` failing outright inside the Packer chroot on
+  Raspberry Pi OS Trixie's newer systemd (Armbian's older systemd silently
+  no-ops it) — dropped `--now` everywhere it isn't meaningful at build time.
+- Packer source block was literally named `"armbian"` even when building
+  the Raspberry Pi OS pipeline, so every build log line read
+  `arm-image.armbian: ...` regardless of which OS was actually being built
+  — renamed to `"base"`.
+
+### Changed
+- Pi OS build artifacts now named `rpi4-5-dpx-buttonode-...` instead of
+  just `rpi-...`, making the target hardware explicit in the filename.
+
+See AGENTS.md gotchas #17-26 for full technical detail behind each fix.
+
+---
+
 ## [0.7.0] - 2026-08-29
 
 Deck redesign, SSH security overhaul, on-device auto-updates, and a first real

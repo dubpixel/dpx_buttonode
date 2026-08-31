@@ -6,40 +6,47 @@ This document provides operational directives for AI coding assistants (GitHub C
 
 ## PROJECT: dpx-buttonode
 
-**Status:** `feature/deck-hid-splash` carries everything — the rename, the Full/Lite
-Companion variant system, the deck HID splash feature (all 3 phases,
-hardware-validated), the SSH security overhaul, and the on-device
-auto-update system. Not yet merged to `main`. Draft/prerelease test builds
-only so far; see `FIRST-BOOT-TEST-PLAN.md` for the checklist a real fresh
-flash needs before this is release-ready.  
-**Branch:** `feature/deck-hid-splash`  
-**Version File:** `VERSION` (0.7.0)
+**Status:** `main` carries everything — the rename, Full/Lite Companion
+variant system, deck HID splash (all 3 phases, hardware-validated), SSH
+security overhaul, on-device auto-update, the real Raspberry Pi OS build
+pipeline for Pi 4/5, and Companion Dashboard (hardware-validated on both
+Armbian and Raspberry Pi OS). All feature branches from this work have
+been merged and deleted — `main` is current, not stale. Work directly off
+`main` for new branches.  
+**Branch:** `main`  
+**Version File:** `VERSION` (0.8.0)
 
-**Branch stack:**
-- `main` — **stale.** Predates the `dpx_buttnode`→`dpx_buttonode` rename
-  and everything since. Do not branch new work off `main`.
-- `refactor/rename-dpx-buttonode` — superseded. The rename it did landed
-  on `feature/deck-hid-splash` too; this branch itself is no longer where
-  active work happens.
-- `feature/deck-hid-splash` — **the active branch.** Contains the rename,
-  the v0.6.0 Full/Lite Companion variant system, and everything documented
-  in `CHANGELOG.md`'s `[0.7.0]` entry. This is what gets built/tested/
-  eventually merged.
-
-**Immediate next steps:**
-1. Build a fresh full-variant image from current `feature/deck-hid-splash`
-   HEAD and walk `FIRST-BOOT-TEST-PLAN.md` on a genuinely blank flash —
-   several real bugs were found and fixed live during 2026-08-28/29
-   hardware testing (see CHANGELOG `[0.7.0]` Fixed section) that were
-   never themselves present in the image actually tested that day.
-2. Merge to `main` once a fresh-flash pass comes back clean.
+**Recently shipped, hardware-validated 2026-08-29/30:**
+- Real Raspberry Pi OS pipeline for Pi 4/5 (issue #6, partially — see
+  below) — six real bugs found and fixed live on real hardware, the last
+  and most important being that Python 3.13's removal of stdlib
+  `crypt`/`spwd` was silently crash-looping the web UI on every single
+  Raspberry Pi OS build the whole time, underneath every boot-target red
+  herring chased before it. See gotchas #17-25.
+- Companion Dashboard (issue #5) — opt-in kiosk toggle, F11 fullscreen
+  button, low-RAM warning, deck splash `D` status key. Confirmed working
+  live on real Pi 4 hardware.
+- Persistent web UI status bar, Uptime/RAM Status cards.
 
 **Open issues:**
+- Issue #3: `/label` self-printed QR label page (planned, not started)
 - Issue #4: make Full variant opt-in on automated releases (`build-full`
   boolean input on `release-action.yaml` so cron only builds Lite)
-- Issue #5: optional Companion Dashboard integration (scoping only)
-- Issue #6: cross-platform (Armbian board matrix + separate Raspberry Pi
-  OS path) support (scoping only)
+- Issue #6: cross-platform support — the Raspberry Pi OS half is now
+  shipped; the Armbian-board-audit half (verify beyond `rockpi-s`) is
+  still open
+- Issue #8: Set Default Connection for Companion Dashboard (scoping only
+  — real architecture finding: connection URL lives in per-window
+  `localStorage`, not a simple config file, so this needs either an
+  upstream PR to `companion-dashboard` or verifying its config-import
+  mechanism, not a naive local fix)
+- Issue #9: on-screen keyboard toggle for the Dashboard kiosk (scoping
+  only — recommends `matchbox-keyboard`, same manual-toggle pattern as
+  F11)
+- Gotcha #26 (AGENTS.md, ROADMAP.md "General" section): unexplained
+  SSH-enabled state found on a genuinely fresh rockpi-s flash — root
+  cause genuinely unresolved, several plausible explanations checked and
+  ruled out with evidence
 
 ---
 
