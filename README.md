@@ -39,7 +39,7 @@
     <img src="images/logo.png" alt="Logo" height="120">
   </a>
 <h1 align="center">dpx-buttonode</h1>
-<h3 align="center"><i>Flash-ready images for <a href="https://bitfocus.io/companion">Bitfocus Companion</a> — turn any ARM SBC (or a real Raspberry Pi 4/5) into a <a href="https://github.com/bitfocus/companion-satellite">Companion Satellite</a> node (or run full Companion itself), switchable at runtime</i></h3>
+<h3 align="center"><i>One image, three <a href="https://bitfocus.io/companion">Bitfocus Companion</a> modes — flash any ARM SBC or real Raspberry Pi 4/5, switch between <a href="https://github.com/bitfocus/companion-satellite">Satellite</a>, full Companion, or <a href="https://bitfocus.io/buttons">Buttons USB Relay</a> from the browser</i></h3>
   <p align="center">
     Automated GitHub Actions build pipeline that produces ready-to-flash <code>.img.gz</code> images —
     for ARM single-board computers (Rock Pi S, Orange Pi Zero, etc.) via Armbian, and for real
@@ -254,7 +254,7 @@ Before any mode claims the device, the attached Stream Deck itself becomes a sta
 screen — no web UI or SSH needed for initial setup:
 
 <div align="center">
-  <img src="images/009_deck_splash.png" alt="Stream Deck config screen" width="600">
+  <img src="images/009_deck_splash.jpg" alt="Stream Deck config screen" width="600">
 </div>
 
 - **MODE** cycles the *pending* selection through Buttons → Satellite → Companion (color-coded, skips
@@ -495,6 +495,30 @@ journalctl -u satellite -f
 # REST API shows current config + connection status
 curl http://localhost:9999/api/config
 ```
+
+---
+
+### Companion Dashboard
+
+An opt-in kiosk display that runs alongside whatever mode (Buttons/Satellite/Companion) is active, on
+units with an HDMI display attached — [tomhillmeyer/companion-dashboard](https://github.com/tomhillmeyer/companion-dashboard),
+installed but disabled by default.
+
+<div align="center">
+  <img src="images/010_dashboard_hardware.jpg" alt="Companion Dashboard running on a Raspberry Pi 4 + touchscreen" width="600">
+</div>
+
+**Enable it:**
+1. Open the web UI's **Mode** tab
+2. Find the **Companion Dashboard** section, click **Turn On**
+3. Dashboard boots into its own first-run screen on the attached display — point it at your Companion
+   instance from there (Dashboard manages its own connection settings, independent of this project)
+4. **Toggle Fullscreen** sends F11 into the running kiosk from the web UI — no keyboard needed at the
+   physical display
+
+**Low-RAM boards:** a non-blocking warning shows on boards reporting under 1GB RAM — Dashboard's X11/
+Electron stack needs real headroom to run reliably alongside a mode service. It's still your call whether
+to enable it; the warning just sets expectations.
 
 ---
 
