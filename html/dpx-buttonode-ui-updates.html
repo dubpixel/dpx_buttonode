@@ -51,35 +51,44 @@ code{background:#21262d;padding:2px 6px;border-radius:4px;font-size:12px;font-fa
 <body>
 <div class="hdr"><h1>⯁ dpx-buttonode-A3A2</h1><span class="tag">dpx-buttonode-ui</span></div>
 <div class="statusbar"><span><b>v0.8.0</b> [full]</span><span>MODE: <b style="color:#e3b341">COMPANION +D</b></span><span>RAM: <b style="color:#3fb950">559MB / 906MB</b></span></div>
-<nav class="nav"><a href="/" class="">Status</a><a href="/hostname" class="">Hostname</a><a href="/network" class="on">Network</a><a href="/devices" class="">Devices</a><a href="/nodes" class="">Nodes</a><a href="/mode" class="">Mode</a><a href="/ssh" class="">SSH</a><a href="/updates" class="">Updates</a></nav>
+<nav class="nav"><a href="/" class="">Status</a><a href="/hostname" class="">Hostname</a><a href="/network" class="">Network</a><a href="/devices" class="">Devices</a><a href="/nodes" class="">Nodes</a><a href="/mode" class="">Mode</a><a href="/ssh" class="">SSH</a><a href="/updates" class="on">Updates</a></nav>
 <div class="wrap">
-<div class="sec"><h2>Network Settings</h2>
-  <p class="note">Using <code>systemd-networkd</code> — writes to <code>/etc/systemd/network/05-dpx-eth.network</code></p>
-  <div class="alert a-warn" style="margin-bottom:14px">
-    ⚠ Do not disable IPv6 — it breaks DHCP on Armbian.
-  </div>
-  <form method="POST" action="/network">
-    <div class="radios">
-      <label><input type="radio" name="mode" value="dhcp"
-               checked
-               onchange="tog(this)"> DHCP (automatic)</label>
-      <label><input type="radio" name="mode" value="static"
-               
-               onchange="tog(this)"> Static IP</label>
-    </div>
-    <div id="sf" style="display:none">
-      <div class="row"><label>IP / prefix (e.g. 192.168.1.100/24)</label>
-        <input type="text" name="ip" value="192.168.1.219/24" placeholder="192.168.1.100/24"></div>
-      <div class="row"><label>Default gateway</label>
-        <input type="text" name="gateway" value="192.168.1.1" placeholder="192.168.1.1"></div>
-      <div class="row"><label>DNS server</label>
-        <input type="text" name="dns" value="8.8.8.8" placeholder="8.8.8.8"></div>
-    </div>
-    <button type="submit" class="btn btn-p">Apply</button>
-    <a href="/" class="btn">Cancel</a>
-  </form>
+
+<div class="sec">
+  <h2>Software Updates</h2>
+  <p class="note">Checked against GitHub Releases, cached for up to an hour. Nothing installs itself — every update is a button push here.</p>
+  <div style="margin-top:10px"><form method="POST" action="/updates" style="display:inline"><input type="hidden" name="action" value="check"><button type="submit" class="btn">Check Now</button></form></div>
 </div>
-<script>function tog(e){document.getElementById('sf').style.display=e.value==='static'?'':'none'}</script></div>
+
+
+<div class="sec">
+  <h2>dpx-buttonode (web UI + deck splash)</h2>
+  <p class="note">Status: <span class="badge badge-off">up to date</span></p>
+  <p class="note">Current: <code>0.8.0</code> &nbsp;&middot;&nbsp; Latest: <code>0.8.0</code></p>
+  <div style="margin-top:10px"></div>
+</div>
+
+<div class="sec">
+  <h2>Bitfocus Buttons USB Relay</h2>
+  <p class="note">Status: <span class="badge badge-off">up to date</span></p>
+  <p class="note">Current: <code>0.8.0</code> &nbsp;&middot;&nbsp; Latest: <code>0.8.0</code></p>
+  <div style="margin-top:10px"></div>
+</div>
+
+<div class="sec">
+  <h2>Companion Satellite</h2>
+  <p class="note">Status: <span class="badge badge-off">up to date</span></p>
+  <p class="note">Current: <code>0.8.0</code> &nbsp;&middot;&nbsp; Latest: <code>0.8.0</code></p>
+  <div style="margin-top:10px"></div>
+</div>
+
+<div class="sec">
+  <h2>Bitfocus Companion (full)</h2>
+  <p class="note">Status: <span class="badge badge-off">up to date</span></p>
+  <p class="note">Current: <code>0.8.0</code> &nbsp;&middot;&nbsp; Latest: <code>0.8.0</code></p>
+  <div style="margin-top:10px"></div>
+</div>
+</div>
 <div class="footer">buttons 0.1.0-beta.4 &nbsp;&middot;&nbsp; satellite 3.4.0 &nbsp;&middot;&nbsp; companion 5.0.4+9717-stable-a69c14dec2 &nbsp;&middot;&nbsp; main@8080ce3 &nbsp;&middot;&nbsp; built 2026-08-30</div>
 </body>
 </html>

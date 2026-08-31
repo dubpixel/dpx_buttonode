@@ -343,6 +343,9 @@ http://dpx-buttonode-XXXX.local:8080
   <br/>
   <img src="images/005_nodes.jpe" alt="Nodes tab" width="480">
   <img src="images/006_mode.jpe" alt="Mode tab" width="480">
+  <br/>
+  <img src="images/007_ssh.jpe" alt="SSH tab" width="480">
+  <img src="images/008_updates.jpe" alt="Updates tab" width="480">
 </div>
 
 A persistent status bar (version, active mode, live RAM — color-coded) shows across every tab, not just Status.

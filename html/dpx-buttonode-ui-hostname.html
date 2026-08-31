@@ -3,14 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>dpx-buttonode-8A2F — dpx-buttonode-ui</title>
+<title>dpx-buttonode-A3A2 — dpx-buttonode-ui</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e1e4e8}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e1e4e8;}
 a{color:#388bfd;text-decoration:none}
 .hdr{background:#161b22;border-bottom:1px solid #30363d;padding:14px 24px;display:flex;align-items:center;gap:10px}
 .hdr h1{font-size:17px;font-weight:700;color:#f0f6ff;letter-spacing:-.3px}
 .tag{background:#1f6feb;color:#fff;font-size:10px;padding:2px 8px;border-radius:12px;font-weight:700;letter-spacing:.3px}
+.statusbar{position:sticky;top:0;z-index:20;background:#0d1117;border-bottom:1px solid #30363d;padding:6px 24px;display:flex;gap:18px;align-items:center;font-family:ui-monospace,monospace;font-size:11px;color:#8b949e;overflow-x:auto;white-space:nowrap}
+.statusbar b{font-weight:700}
 .nav{background:#161b22;border-bottom:1px solid #21262d;padding:0 24px;display:flex;gap:2px;overflow-x:auto}
 .nav a{display:inline-block;padding:10px 14px;font-size:13px;color:#8b949e;border-bottom:2px solid transparent;white-space:nowrap}
 .nav a.on,.nav a:hover{color:#f0f6ff;border-bottom-color:#1f6feb}
@@ -46,44 +49,27 @@ code{background:#21262d;padding:2px 6px;border-radius:4px;font-size:12px;font-fa
 </style>
 </head>
 <body>
-
-<div class="hdr">
-  <h1>⯁ dpx-buttonode-8A2F</h1>
-  <span class="tag">dpx-buttonode-ui</span>
-</div>
-
-<nav class="nav">
-  <a href="#">Status</a>
-  <a href="#" class="on">Hostname</a>
-  <a href="#">Network</a>
-  <a href="#">Devices</a>
-  <a href="#">Nodes</a>
-  <a href="#">Mode</a>
-</nav>
-
+<div class="hdr"><h1>⯁ dpx-buttonode-A3A2</h1><span class="tag">dpx-buttonode-ui</span></div>
+<div class="statusbar"><span><b>v0.8.0</b> [full]</span><span>MODE: <b style="color:#e3b341">COMPANION +D</b></span><span>RAM: <b style="color:#3fb950">559MB / 906MB</b></span></div>
+<nav class="nav"><a href="/" class="">Status</a><a href="/hostname" class="on">Hostname</a><a href="/network" class="">Network</a><a href="/devices" class="">Devices</a><a href="/nodes" class="">Nodes</a><a href="/mode" class="">Mode</a><a href="/ssh" class="">SSH</a><a href="/updates" class="">Updates</a></nav>
 <div class="wrap">
-  <div class="sec">
-    <h2>Change Hostname</h2>
-    <p class="note">
-      Current hostname: <code>dpx-buttonode-8A2F</code><br>
-      mDNS address: <code>dpx-buttonode-8A2F.local</code><br>
-      The new hostname is applied immediately and persists across reboots.
-    </p>
-    <form method="POST" action="/hostname">
-      <div class="row">
-        <label>New hostname (letters, numbers, hyphens — no spaces)</label>
-        <input type="text" name="hostname" value="dpx-buttonode-8A2F"
-               placeholder="dpx-buttonode-XXXX">
-      </div>
-      <button type="submit" class="btn btn-p">Apply</button>
-      <a href="/" class="btn">Cancel</a>
-    </form>
-  </div>
-</div>
-
-<div class="footer">
-  dpx-buttonode v0.5.0 &nbsp;&middot;&nbsp; buttons 0.1.0-beta.4 &nbsp;&middot;&nbsp; satellite 1.9.1 &nbsp;&middot;&nbsp; main@a3f7c12 &nbsp;&middot;&nbsp; built 2026-07-17
-</div>
-
+<div class="sec"><h2>Change Hostname</h2>
+  <p class="note">
+    Current hostname: <code>dpx-buttonode-A3A2</code><br>
+    mDNS address: <code>dpx-buttonode-A3A2.local</code><br>
+    The new hostname is applied immediately and persists across reboots.
+  </p>
+  <form method="POST" action="/hostname">
+    <div class="row">
+      <label>New hostname (letters, numbers, hyphens — no spaces)</label>
+      <input type="text" name="hostname" value="dpx-buttonode-A3A2"
+             placeholder="dpx-buttonode-XXXX"
+             pattern="[a-zA-Z0-9][a-zA-Z0-9\-]{0,62}" required>
+    </div>
+    <button type="submit" class="btn btn-p">Apply</button>
+    <a href="/" class="btn">Cancel</a>
+  </form>
+</div></div>
+<div class="footer">buttons 0.1.0-beta.4 &nbsp;&middot;&nbsp; satellite 3.4.0 &nbsp;&middot;&nbsp; companion 5.0.4+9717-stable-a69c14dec2 &nbsp;&middot;&nbsp; main@8080ce3 &nbsp;&middot;&nbsp; built 2026-08-30</div>
 </body>
 </html>

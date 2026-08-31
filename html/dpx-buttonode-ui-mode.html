@@ -3,14 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>dpx-buttonode-8A2F — dpx-buttonode-ui</title>
+<title>dpx-buttonode-A3A2 — dpx-buttonode-ui</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e1e4e8}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e1e4e8;}
 a{color:#388bfd;text-decoration:none}
 .hdr{background:#161b22;border-bottom:1px solid #30363d;padding:14px 24px;display:flex;align-items:center;gap:10px}
 .hdr h1{font-size:17px;font-weight:700;color:#f0f6ff;letter-spacing:-.3px}
 .tag{background:#1f6feb;color:#fff;font-size:10px;padding:2px 8px;border-radius:12px;font-weight:700;letter-spacing:.3px}
+.statusbar{position:sticky;top:0;z-index:20;background:#0d1117;border-bottom:1px solid #30363d;padding:6px 24px;display:flex;gap:18px;align-items:center;font-family:ui-monospace,monospace;font-size:11px;color:#8b949e;overflow-x:auto;white-space:nowrap}
+.statusbar b{font-weight:700}
 .nav{background:#161b22;border-bottom:1px solid #21262d;padding:0 24px;display:flex;gap:2px;overflow-x:auto}
 .nav a{display:inline-block;padding:10px 14px;font-size:13px;color:#8b949e;border-bottom:2px solid transparent;white-space:nowrap}
 .nav a.on,.nav a:hover{color:#f0f6ff;border-bottom-color:#1f6feb}
@@ -19,10 +22,25 @@ a{color:#388bfd;text-decoration:none}
 .card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px}
 .lbl{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
 .val{font-size:17px;font-weight:700;color:#f0f6ff;font-family:ui-monospace,monospace;word-break:break-all}
+.val.on{color:#3fb950}.val.off{color:#f85149}
 .sec{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:14px}
 .sec h2{font-size:12px;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #21262d}
+.row{margin-bottom:12px}
+.row label{display:block;font-size:12px;color:#8b949e;margin-bottom:4px}
+input[type=text]{width:100%;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px 12px;color:#f0f6ff;font-size:14px;font-family:ui-monospace,monospace}
+input[type=text]:focus{outline:none;border-color:#1f6feb;box-shadow:0 0 0 3px #1f6feb22}
 .btn{background:#21262d;border:1px solid #30363d;color:#f0f6ff;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;display:inline-block;margin-right:6px;font-family:inherit}
-.btn-p{background:#1f6feb;border-color:#1f6feb}
+.btn-p{background:#1f6feb;border-color:#1f6feb}.btn-p:hover{background:#388bfd}
+.btn-w{background:#9e6a03;border-color:#9e6a03}.btn-w:hover{background:#b07d12}
+.alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:16px;line-height:1.5}
+.a-ok{background:#0d2a1a;border:1px solid #3fb950;color:#3fb950}
+.a-err{background:#2a0d0d;border:1px solid #f85149;color:#f85149}
+.a-warn{background:#2a1d00;border:1px solid #9e6a03;color:#d4a017}
+.radios{display:flex;gap:16px;margin-bottom:14px}
+.radios label{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px}
+.usb{list-style:none}
+.usb li{font-family:ui-monospace,monospace;font-size:12px;color:#8b949e;padding:5px 0;border-bottom:1px solid #21262d}
+.usb li:last-child{border:none}
 .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
 .badge-on{background:#0d2a1a;color:#3fb950}.badge-off{background:#21262d;color:#8b949e}
 code{background:#21262d;padding:2px 6px;border-radius:4px;font-size:12px;font-family:ui-monospace,monospace}
@@ -31,84 +49,71 @@ code{background:#21262d;padding:2px 6px;border-radius:4px;font-size:12px;font-fa
 </style>
 </head>
 <body>
-
-<div class="hdr">
-  <h1>⯁ dpx-buttonode-8A2F</h1>
-  <span class="tag">dpx-buttonode-ui</span>
-</div>
-
-<nav class="nav">
-  <a href="#">Status</a>
-  <a href="#">Hostname</a>
-  <a href="#">Network</a>
-  <a href="#">Devices</a>
-  <a href="#">Nodes</a>
-  <a href="#" class="on">Mode</a>
-</nav>
-
+<div class="hdr"><h1>⯁ dpx-buttonode-A3A2</h1><span class="tag">dpx-buttonode-ui</span></div>
+<div class="statusbar"><span><b>v0.8.0</b> [full]</span><span>MODE: <b style="color:#e3b341">COMPANION +D</b></span><span>RAM: <b style="color:#3fb950">559MB / 906MB</b></span></div>
+<nav class="nav"><a href="/" class="">Status</a><a href="/hostname" class="">Hostname</a><a href="/network" class="">Network</a><a href="/devices" class="">Devices</a><a href="/nodes" class="">Nodes</a><a href="/mode" class="on">Mode</a><a href="/ssh" class="">SSH</a><a href="/updates" class="">Updates</a></nav>
 <div class="wrap">
-
-  <div class="sec">
-    <h2>Active Mode</h2>
-    <div style="background:#161b22;border:2px solid #2ea043;border-radius:10px;
-                padding:18px 20px;margin-bottom:20px;display:flex;
-                align-items:center;justify-content:space-between;gap:12px">
-      <div>
-        <div style="font-size:20px;font-weight:700;color:#f0f6ff;margin-bottom:6px">A — Buttons USB Relay</div>
-        <div style="font-size:12px;color:#8b949e">/etc/dpx-mode = <code>buttons</code></div>
-      </div>
-      <form method="POST" action="/mode" style="margin:0">
-        <input type="hidden" name="new_mode" value="satellite">
-        <button type="submit" class="btn btn-p">Switch to Satellite →</button>
-      </form>
-    </div>
+<div class="sec">
+  <h2>Active Mode</h2>
+  <div style="background:#161b22;border:2px solid #9e6a03;border-radius:10px;
+              padding:18px 20px;margin-bottom:16px">
+    <div style="font-size:20px;font-weight:700;color:#f0f6ff;margin-bottom:6px">C — Bitfocus Companion +D</div>
+    <div style="font-size:12px;color:#8b949e;margin-bottom:14px">/etc/dpx-mode = <code>companion</code></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px"><form id="mode-form-buttons" method="POST" action="/mode" style="display:inline;margin-right:6px"><input type="hidden" name="new_mode" value="buttons"><button type="submit" form="mode-form-buttons" class="btn btn-p" style="font-size:12px">Buttons</button></form><form id="mode-form-satellite" method="POST" action="/mode" style="display:inline;margin-right:6px"><input type="hidden" name="new_mode" value="satellite"><button type="submit" form="mode-form-satellite" class="btn btn-p" style="font-size:12px">Satellite</button></form><form id="mode-form-companion" method="POST" action="/mode" style="display:inline"><input type="hidden" name="new_mode" value="companion"><span style="font-size:12px;color:#8b949e;padding:8px 14px;border:1px solid #30363d;border-radius:6px;display:inline-block">Companion ✓</span></form></div>
+    
   </div>
-
-  <div class="sec">
-    <h2>Service Status</h2>
-    <div class="grid">
-      <div class="card">
-        <div class="lbl">Buttons USB Relay</div>
-        <div class="val">bitfocus-buttons-usb-relay <span class="badge badge-on">active</span></div>
-      </div>
-      <div class="card">
-        <div class="lbl">Companion Satellite</div>
-        <div class="val">satellite <span class="badge badge-off">inactive</span></div>
-      </div>
-    </div>
+</div>
+<div class="sec">
+  <h2>Service Status</h2>
+  <div class="grid">
+    <div class="card"><div class="lbl">Buttons USB Relay</div>
+      <div class="val" style="font-size:13px">bitfocus-buttons-usb-relay <span class="badge badge-off">inactive</span></div></div>
+    <div class="card"><div class="lbl">Companion Satellite</div>
+      <div class="val" style="font-size:13px">satellite <span class="badge badge-on">active</span></div></div>
+    <div class="card"><div class="lbl">Companion (Full)</div>
+      <div class="val" style="font-size:13px">companion <span class="badge badge-off">inactive</span></div></div>
   </div>
-
-  <div class="sec">
-    <h2>Companion Server Config</h2>
-    <p class="note">Set the IP and port of your Bitfocus Companion server (TCP 16622).<br>
-      Saved to <code>/etc/dpx-satellite.conf</code>. Applied on next Satellite start.</p>
-    <form method="POST" action="/satellite-config">
-      <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
-        <tr>
-          <td style="padding:6px 0;color:#8b949e;font-size:13px;width:110px">Host / IP</td>
-          <td><input name="host" type="text" value=""
-                     placeholder="192.168.1.10"
-                     style="width:100%;max-width:280px;background:#0d1117;border:1px solid #30363d;
-                            color:#f0f6ff;border-radius:6px;padding:7px 10px;font-size:13px"></td>
-        </tr>
-        <tr>
-          <td style="padding:6px 0;color:#8b949e;font-size:13px">Port</td>
-          <td><input name="port" type="number" value="16622"
-                     placeholder="16622" min="1" max="65535"
-                     style="width:120px;background:#0d1117;border:1px solid #30363d;
-                            color:#f0f6ff;border-radius:6px;padding:7px 10px;font-size:13px"></td>
-        </tr>
-      </table>
-      <button type="submit" class="btn btn-p">✓ Save Config</button>
-      <a href="/mode" class="btn">Cancel</a>
-    </form>
-  </div>
-
+</div>
+<div class="sec">
+  <h2>Companion Server Config <span style="font-size:11px;font-weight:400;color:#8b949e">(Satellite mode)</span></h2>
+  <p class="note">IP and port of your Bitfocus Companion server (TCP 16622).<br>
+    Saved to <code>/etc/dpx-satellite.conf</code>. Applied on next Satellite start.</p>
+  <form method="POST" action="/satellite-config">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+      <tr>
+        <td style="padding:6px 0;color:#8b949e;font-size:13px;width:110px">Host / IP</td>
+        <td><input name="host" type="text" value="192.168.1.10"
+                   placeholder="192.168.1.10"
+                   style="width:100%;max-width:280px;background:#161b22;border:1px solid #30363d;
+                          color:#f0f6ff;border-radius:6px;padding:7px 10px;font-size:13px"></td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;color:#8b949e;font-size:13px">Port</td>
+        <td><input name="port" type="number" value="16622"
+                   placeholder="16622" min="1" max="65535"
+                   style="width:120px;background:#161b22;border:1px solid #30363d;
+                          color:#f0f6ff;border-radius:6px;padding:7px 10px;font-size:13px"></td>
+      </tr>
+    </table>
+    <button type="submit" class="btn btn-p">✓ Save Config</button>
+    <a href="/mode" class="btn">Cancel</a>
+  </form>
 </div>
 
-<div class="footer">
-  dpx-buttonode v0.5.0 &nbsp;&middot;&nbsp; buttons 0.1.0-beta.4 &nbsp;&middot;&nbsp; satellite 1.9.1 &nbsp;&middot;&nbsp; main@a3f7c12 &nbsp;&middot;&nbsp; built 2026-07-17
-</div>
-
+<div class="sec"><h2>Companion Dashboard</h2>
+  <p class="note">
+    Opt-in kiosk display <span class="badge badge-on">● running</span><br>
+    Runs alongside whatever mode (Buttons/Satellite/Companion) is active.
+    Needs an attached HDMI display. Configure which Companion instance it
+    points at from its own on-screen settings after enabling.
+  </p>
+  <p class="note" style="color:#c33">⚠ This board reports 906MB RAM — Dashboard's X11/Electron kiosk stack usually needs 1GB+ to run reliably alongside a mode service. It may crash-loop or hang on enable. Enable at your own risk.</p>
+  <form method="POST" action="/dashboard" style="display:inline">
+    <input type="hidden" name="action" value="disable">
+    <button type="submit" class="btn btn-w">⏻ Turn Off</button>
+  </form>
+  <form method="POST" action="/dashboard/fullscreen" style="display:inline"><button type="submit" class="btn">⛶ Toggle Fullscreen</button></form>
+</div></div>
+<div class="footer">buttons 0.1.0-beta.4 &nbsp;&middot;&nbsp; satellite 3.4.0 &nbsp;&middot;&nbsp; companion 5.0.4+9717-stable-a69c14dec2 &nbsp;&middot;&nbsp; main@8080ce3 &nbsp;&middot;&nbsp; built 2026-08-30</div>
 </body>
 </html>

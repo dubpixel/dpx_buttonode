@@ -51,35 +51,50 @@ code{background:#21262d;padding:2px 6px;border-radius:4px;font-size:12px;font-fa
 <body>
 <div class="hdr"><h1>⯁ dpx-buttonode-A3A2</h1><span class="tag">dpx-buttonode-ui</span></div>
 <div class="statusbar"><span><b>v0.8.0</b> [full]</span><span>MODE: <b style="color:#e3b341">COMPANION +D</b></span><span>RAM: <b style="color:#3fb950">559MB / 906MB</b></span></div>
-<nav class="nav"><a href="/" class="">Status</a><a href="/hostname" class="">Hostname</a><a href="/network" class="on">Network</a><a href="/devices" class="">Devices</a><a href="/nodes" class="">Nodes</a><a href="/mode" class="">Mode</a><a href="/ssh" class="">SSH</a><a href="/updates" class="">Updates</a></nav>
+<nav class="nav"><a href="/" class="">Status</a><a href="/hostname" class="">Hostname</a><a href="/network" class="">Network</a><a href="/devices" class="">Devices</a><a href="/nodes" class="">Nodes</a><a href="/mode" class="">Mode</a><a href="/ssh" class="on">SSH</a><a href="/updates" class="">Updates</a></nav>
 <div class="wrap">
-<div class="sec"><h2>Network Settings</h2>
-  <p class="note">Using <code>systemd-networkd</code> — writes to <code>/etc/systemd/network/05-dpx-eth.network</code></p>
-  <div class="alert a-warn" style="margin-bottom:14px">
-    ⚠ Do not disable IPv6 — it breaks DHCP on Armbian.
-  </div>
-  <form method="POST" action="/network">
-    <div class="radios">
-      <label><input type="radio" name="mode" value="dhcp"
-               checked
-               onchange="tog(this)"> DHCP (automatic)</label>
-      <label><input type="radio" name="mode" value="static"
-               
-               onchange="tog(this)"> Static IP</label>
-    </div>
-    <div id="sf" style="display:none">
-      <div class="row"><label>IP / prefix (e.g. 192.168.1.100/24)</label>
-        <input type="text" name="ip" value="192.168.1.219/24" placeholder="192.168.1.100/24"></div>
-      <div class="row"><label>Default gateway</label>
-        <input type="text" name="gateway" value="192.168.1.1" placeholder="192.168.1.1"></div>
-      <div class="row"><label>DNS server</label>
-        <input type="text" name="dns" value="8.8.8.8" placeholder="8.8.8.8"></div>
-    </div>
-    <button type="submit" class="btn btn-p">Apply</button>
-    <a href="/" class="btn">Cancel</a>
-  </form>
+
+<div class="sec" style="border:2px solid #e3b341">
+  <h2>⚠ Random Password Active</h2>
+  <p class="note">
+    A random root password was generated on first boot — it's <strong>not shown here</strong>
+    (this page has no login of its own). Hold the <strong>SSH</strong> key on the Stream Deck's
+    screen to reveal it, use it below to enable SSH or set your own password. It's deleted
+    everywhere the moment you set a real one.
+  </p>
 </div>
-<script>function tog(e){document.getElementById('sf').style.display=e.value==='static'?'':'none'}</script></div>
+<div class="sec">
+  <h2>SSH Access</h2>
+  <p class="note">Status: <span class="badge badge-off">disabled</span></p>
+  <p class="note" style="margin-top:6px">
+    Ships <strong>disabled by default</strong>. Every action here requires the current root
+    password — this page itself has no login of its own, so that's the only thing stopping
+    anyone on the LAN from flipping SSH on for themselves.
+  </p>
+  <div style="margin-top:14px"><form method="POST" action="/ssh" style="display:inline"><input type="hidden" name="action" value="enable"><input name="current_password" type="password" placeholder="Current root password" required style="background:#161b22;border:1px solid #30363d;color:#f0f6ff;border-radius:6px;padding:7px 10px;font-size:13px;margin-right:8px"><button type="submit" class="btn btn-p">Enable SSH</button></form></div>
+</div>
+<div class="sec">
+  <h2>Change Root Password</h2>
+  <form method="POST" action="/ssh">
+    <input type="hidden" name="action" value="change-password">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+      <tr>
+        <td style="padding:6px 0;color:#8b949e;font-size:13px;width:150px">Current password</td>
+        <td><input name="current_password" type="password" required
+                   style="width:100%;max-width:280px;background:#161b22;border:1px solid #30363d;
+                          color:#f0f6ff;border-radius:6px;padding:7px 10px;font-size:13px"></td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;color:#8b949e;font-size:13px">New password</td>
+        <td><input name="new_password" type="password" minlength="8" required
+                   placeholder="8+ characters"
+                   style="width:100%;max-width:280px;background:#161b22;border:1px solid #30363d;
+                          color:#f0f6ff;border-radius:6px;padding:7px 10px;font-size:13px"></td>
+      </tr>
+    </table>
+    <button type="submit" class="btn btn-p">Change Password</button>
+  </form>
+</div></div>
 <div class="footer">buttons 0.1.0-beta.4 &nbsp;&middot;&nbsp; satellite 3.4.0 &nbsp;&middot;&nbsp; companion 5.0.4+9717-stable-a69c14dec2 &nbsp;&middot;&nbsp; main@8080ce3 &nbsp;&middot;&nbsp; built 2026-08-30</div>
 </body>
 </html>
