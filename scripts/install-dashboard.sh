@@ -86,7 +86,7 @@ xset s off
 xset s noblank
 unclutter -idle 0.5 -root &
 openbox-session &
-exec companion-dashboard --kiosk --no-sandbox
+exec companion-dashboard --kiosk-mode --no-sandbox
 XINITRC
 chmod +x "$DASH_HOME/.xinitrc"
 
