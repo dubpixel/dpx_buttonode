@@ -57,6 +57,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Still needed on a native arm64 runner -- see armbian-builder.yaml's
+      # build job for why (Prepare()-time qemu_binary resolution is
+      # unconditional, only actual usage is skipped on native arch).
+      - name: Install QEMU user-static
+        run: sudo apt-get update -q && sudo apt-get install -y qemu-user-static
+
       # ── Download Bitfocus Buttons package from mirror ──────────────────────
       - name: Download Buttons USB Relay package from mirror
         env:

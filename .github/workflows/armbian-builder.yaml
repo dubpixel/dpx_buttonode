@@ -301,6 +301,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Still needed even on a native arm64 runner: the plugin's Prepare()
+      # step unconditionally resolves a qemu_binary path via exec.LookPath
+      # regardless of whether it'll actually be used later -- only its
+      # separate Run()-time IsNative() check decides whether QEMU is
+      # actually invoked for the chroot. Without this installed, Prepare()
+      # falls back to an "embedded qemu" feature that's amd64-only and
+      # fails outright on arm64 (confirmed: "embedded qemu is not
+      # available - currently, embedded qemu is only available for linux
+      # amd64"). This is just a fast package install, not the slow part.
+      - name: Install QEMU user-static
+        run: sudo apt-get update -q && sudo apt-get install -y qemu-user-static
+
       # ── Download Bitfocus Buttons package from mirror ──────────────────────
       - name: Download Buttons USB Relay package from mirror
         env:
