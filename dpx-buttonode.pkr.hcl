@@ -73,6 +73,7 @@ source "arm-image" "base" {
   iso_url           = var.url
   target_image_size = var.variant == "full" ? 8000000000 : 5000000000
   output_filename   = "output-dpx-buttonode/dpx-buttonode.img"
+  image_arch      = "arm64"
   qemu_binary     = "qemu-aarch64-static"
   image_mounts    = var.image_mounts
 
