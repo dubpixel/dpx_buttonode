@@ -165,3 +165,11 @@ notices.
   go through the release job at all.
 - Low priority relative to #10-#17, but cheap to build once — fold into
   the work whenever convenient, or do it standalone.
+
+**Implemented 2026-09-05**: `release-action.yaml`'s `release` job now deletes
+its own run's CI artifacts immediately after the release is created
+(`actions: write` added to its permissions). New `artifact-sweep.yaml`
+workflow runs weekly (Sunday 05:00 UTC) plus `workflow_dispatch`, deleting
+any artifact anywhere in the repo already past its own `expires_at` — the
+same category of already-expired-but-uncollected artifact found and
+manually cleared this session.
