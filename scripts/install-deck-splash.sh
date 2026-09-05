@@ -105,8 +105,74 @@ KillMode=process
 WantedBy=multi-user.target
 UNIT
 
-systemctl enable dpx-deck-splash.service
-echo "==> dpx-deck-splash.service: enabled"
+# NOT enabled directly. dpx-mode-select.service (below) is now the only
+# thing that starts this at boot -- only as the no-persisted-mode
+# fallback -- instead of both it and the current mode service racing
+# multi-user.target with Conflicts= picking whichever happens to win
+# (dpx#12, confirmed nondeterministic on hardware). The [Install] block
+# stays so `systemctl enable dpx-deck-splash.service` still works for
+# anyone who wants the old always-auto-start behavior back.
+echo "==> dpx-deck-splash.service: installed (started via dpx-mode-select.service, not auto-enabled)"
+
+# ── Recovery: bring the splash back if a mode service dies for good ────────
+# OnFailure= only fires when a unit's ActiveState actually reaches
+# "failed" -- with Restart=on-failure, systemd holds the unit in
+# "activating (auto-restart)" between individual retry attempts, and
+# only lands in "failed" once StartLimitBurst is exhausted. So this
+# fires once per real, permanent outage, not once per transient restart
+# (dpx#11 -- "what's not clear is when the splash comes back"). Purely
+# event-driven, no polling loop.
+#
+# Drop-ins, not edits to the vendor unit files themselves -- all three
+# mode services ship from their own .deb packages (Buttons/Satellite/
+# Companion), not this repo, and a drop-in survives a package upgrade
+# that a direct edit wouldn't.
+for MODE_UNIT in bitfocus-buttons-usb-relay.service satellite.service companion.service; do
+    mkdir -p "/etc/systemd/system/${MODE_UNIT}.d"
+    cat > "/etc/systemd/system/${MODE_UNIT}.d/dpx-recovery.conf" << 'UNIT'
+[Unit]
+OnFailure=dpx-deck-splash.service
+UNIT
+done
+echo "==> OnFailure=dpx-deck-splash.service drop-ins installed for all 3 mode services"
+
+# ── Boot-time mode selection: exactly one of {persisted mode, splash} ──────
+# The other half of dpx#12/dpx#11: decide once, at boot, which single
+# thing should run instead of leaving it to a Conflicts= race. Reads
+# /etc/dpx-mode (same file switch_mode() in dpx-buttonode-ui.py writes)
+# and starts that mode's service; falls back to the splash if nothing's
+# persisted or the target service refuses to start. Mirrors
+# get_dpx_mode()'s own "buttons" default for consistency.
+cat > /usr/local/bin/dpx-mode-select.sh << 'SCRIPT'
+#!/usr/bin/env bash
+set -u
+MODE="$(cat /etc/dpx-mode 2>/dev/null || echo "buttons")"
+case "$MODE" in
+    buttons)   SVC="bitfocus-buttons-usb-relay.service" ;;
+    satellite) SVC="satellite.service" ;;
+    companion) SVC="companion.service" ;;
+    *)         SVC="bitfocus-buttons-usb-relay.service" ;;
+esac
+systemctl start "$SVC" || systemctl start dpx-deck-splash.service
+SCRIPT
+chmod +x /usr/local/bin/dpx-mode-select.sh
+
+cat > /etc/systemd/system/dpx-mode-select.service << 'UNIT'
+[Unit]
+Description=Start the persisted dpx-buttonode mode (fallback: deck splash)
+Documentation=https://github.com/dubpixel/dpx_buttonode
+After=dpx-set-hostname.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/dpx-mode-select.sh
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl enable dpx-mode-select.service
+echo "==> dpx-mode-select.service: enabled"
 
 # ── sudoers: the ONLY door from dpx-splash (buttons group, nothing else)
 # to actually changing system state ─────────────────────────────────────────

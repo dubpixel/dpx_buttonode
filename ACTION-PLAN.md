@@ -111,6 +111,13 @@ falling back to splash only if none is." Solving that cleanly handles both the
 the right thing should win automatically" case (#12) with one mechanism instead
 of two bolted-on fixes that could disagree with each other.
 
+**Implemented 2026-09-05**, in `scripts/install-deck-splash.sh`:
+- `OnFailure=dpx-deck-splash.service` drop-ins (`/etc/systemd/system/<mode>.service.d/dpx-recovery.conf`) on all three mode units. Drop-ins, not direct edits, since all three ship from vendor `.deb`s, not this repo — survives a package upgrade.
+- `dpx-mode-select.service` (new oneshot, `WantedBy=multi-user.target`): reads `/etc/dpx-mode` at boot and starts exactly that one mode service, falling back to `dpx-deck-splash.service` if nothing's persisted or the target refuses to start.
+- `dpx-deck-splash.service` no longer auto-enabled — it's only ever started by the fallback above or by an `OnFailure` recovery, never racing the mode service for `multi-user.target` on its own.
+- **Not yet live-verified** (no device access this pass) — needs a real boot-cycle test: confirm the persisted mode wins every time, and force a mode service into permanent failure (e.g. `systemctl kill` past its restart burst) to confirm splash actually comes back.
+- Also worth re-checking against this fix once live: the reported "device is already in a mode but not started, hitting GO does not start the thing" symptom. `execute_staged()`'s `mode_dead` check in `dpx-deck-splash.py` already looks correct on paper (re-applies if the persisted mode's service isn't actually active) — this may already have been a downstream effect of the same boot race rather than a separate bug. Confirm rather than assume once testable.
+
 Dashboard's own boot-time auto-start (the "and dashboard on/off" half of #12) is
 simpler and independent of the above — it's just "should `dpx-dashboard.service`
 be enabled or not," already a persisted systemd state via `set_dashboard_enabled()`,
