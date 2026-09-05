@@ -648,8 +648,8 @@ def render_status(alert="", alert_cls="a-ok"):
 <div class="grid">
   <div class="card" style="grid-column:span 2"><div class="lbl">Hostname</div>
     <div class="val" style="font-size:15px">{host}</div></div>
-  <div class="card"><div class="lbl">IP Address</div>
-    <div class="val">{ip}</div></div>
+  <div class="card" style="grid-column:span 2"><div class="lbl">IP Address</div>
+    <div class="val" style="font-size:15px">{ip}</div></div>
   <div class="card"><div class="lbl">MAC</div>
     <div class="val" style="font-size:12px">{mac}</div></div>
   <div class="card"><div class="lbl">Network</div>
