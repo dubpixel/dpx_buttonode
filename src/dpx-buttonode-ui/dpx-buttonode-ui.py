@@ -837,6 +837,7 @@ def dashboard_section():
     <button type="submit" class="btn {'btn-w' if on else 'btn-p'}">{label}</button>
   </form>
   {'<form method="POST" action="/dashboard/fullscreen" style="display:inline"><button type="submit" class="btn">⛶ Toggle Fullscreen</button></form>' if on else ''}
+  {f'<a href="http://{esc(get_ip())}/control" target="_blank" class="btn" style="text-decoration:none;display:inline-block">⚙ Remote Config ↗</a>' if on else ''}
 </div>"""
 
 
