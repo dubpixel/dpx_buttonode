@@ -279,6 +279,58 @@ def write_networkd_config(iface, mode, ip_cidr=None, gateway=None, dns="8.8.8.8"
          "systemctl", "restart", "dpx-buttonode-ui"])
 
 
+def write_nmcli_config(iface, mode, ip_cidr=None, gateway=None, dns="8.8.8.8"):
+    """Apply network config through NetworkManager. `nmcli connection
+    modify` writes the change straight to the connection's on-disk
+    profile (/etc/NetworkManager/system-connections/*.nmconnection), so
+    unlike the networkd path there's no separate config file to manage —
+    the same command that applies it live is what makes it persist."""
+    out, _, _ = run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"])
+    conn = ""
+    for line in out.splitlines():
+        parts = line.split(":")
+        if len(parts) >= 2 and "ethernet" in parts[1].lower():
+            conn = parts[0]
+            break
+    if not conn:
+        return
+    if mode == "dhcp":
+        run(["nmcli", "connection", "modify", conn,
+             "ipv4.method", "auto",
+             "ipv4.addresses", "",
+             "ipv4.gateway", "",
+             "ipv4.dns", ""])
+    else:
+        run(["nmcli", "connection", "modify", conn,
+             "ipv4.method", "manual",
+             "ipv4.addresses", ip_cidr,
+             "ipv4.gateway", gateway,
+             "ipv4.dns", dns])
+    run(["nmcli", "connection", "up", conn])
+    run(["systemctl", "reload-or-restart", "avahi-daemon"])
+    active_svc = {
+        "buttons": "bitfocus-buttons-usb-relay",
+        "satellite": "satellite",
+        "companion": "companion",
+    }.get(get_dpx_mode(), "bitfocus-buttons-usb-relay")
+    run(["systemctl", "restart", active_svc])
+    run(["systemd-run", "--no-block", "--quiet",
+         "systemctl", "restart", "dpx-buttonode-ui"])
+
+
+def apply_net_config(iface, mode, ip_cidr=None, gateway=None, dns="8.8.8.8"):
+    """Persist network config through whichever backend actually manages
+    this interface. Raspberry Pi OS defaults to NetworkManager; Armbian
+    defaults to systemd-networkd/Netplan. Writing networkd files on an
+    nmcli-managed box doesn't survive reboot — NetworkManager reasserts
+    its own connection profile on boot, reverting straight back to DHCP
+    (dpx#14) — so the two paths need picking, not just one used blindly."""
+    if nmcli_available():
+        write_nmcli_config(iface, mode, ip_cidr, gateway, dns)
+    else:
+        write_networkd_config(iface, mode, ip_cidr, gateway, dns)
+
+
 def toggle_net():
     """Flip DHCP<->static. No argument needed — a caller with no way to
     type an address (a deck keypress) should have nothing to get wrong.
@@ -301,9 +353,9 @@ def toggle_net():
     if current["mode"] == "dhcp":
         if not current.get("gateway"):
             return False, "No gateway detected — can't safely pin a static config"
-        write_networkd_config(iface, "static", current["ip_cidr"], current["gateway"], current["dns"])
+        apply_net_config(iface, "static", current["ip_cidr"], current["gateway"], current["dns"])
         return True, f"Pinned static {current['ip_cidr']}"
-    write_networkd_config(iface, "dhcp")
+    apply_net_config(iface, "dhcp")
     return True, "Switched to DHCP"
 
 
@@ -334,7 +386,7 @@ def pin_static(cidr_str):
     else:
         prefix = current["ip_cidr"].split("/")[-1] if "/" in current["ip_cidr"] else "24"
     ip_cidr = f"{ip_str}/{prefix}"
-    write_networkd_config(iface, "static", ip_cidr, current["gateway"], current["dns"])
+    apply_net_config(iface, "static", ip_cidr, current["gateway"], current["dns"])
     return True, f"Pinned static {ip_cidr}"
 
 
@@ -648,8 +700,8 @@ def render_status(alert="", alert_cls="a-ok"):
 <div class="grid">
   <div class="card" style="grid-column:span 2"><div class="lbl">Hostname</div>
     <div class="val" style="font-size:15px">{host}</div></div>
-  <div class="card"><div class="lbl">IP Address</div>
-    <div class="val">{ip}</div></div>
+  <div class="card" style="grid-column:span 2"><div class="lbl">IP Address</div>
+    <div class="val" style="font-size:15px">{ip}</div></div>
   <div class="card"><div class="lbl">MAC</div>
     <div class="val" style="font-size:12px">{mac}</div></div>
   <div class="card"><div class="lbl">Network</div>
@@ -837,6 +889,7 @@ def dashboard_section():
     <button type="submit" class="btn {'btn-w' if on else 'btn-p'}">{label}</button>
   </form>
   {'<form method="POST" action="/dashboard/fullscreen" style="display:inline"><button type="submit" class="btn">⛶ Toggle Fullscreen</button></form>' if on else ''}
+  {f'<a href="http://{esc(get_ip())}/control" target="_blank" class="btn" style="text-decoration:none;display:inline-block">⚙ Remote Config ↗</a>' if on else ''}
 </div>"""
 
 

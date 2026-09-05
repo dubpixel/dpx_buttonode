@@ -111,6 +111,13 @@ falling back to splash only if none is." Solving that cleanly handles both the
 the right thing should win automatically" case (#12) with one mechanism instead
 of two bolted-on fixes that could disagree with each other.
 
+**Implemented 2026-09-05**, in `scripts/install-deck-splash.sh`:
+- `OnFailure=dpx-deck-splash.service` drop-ins (`/etc/systemd/system/<mode>.service.d/dpx-recovery.conf`) on all three mode units. Drop-ins, not direct edits, since all three ship from vendor `.deb`s, not this repo — survives a package upgrade.
+- `dpx-mode-select.service` (new oneshot, `WantedBy=multi-user.target`): reads `/etc/dpx-mode` at boot and starts exactly that one mode service, falling back to `dpx-deck-splash.service` if nothing's persisted or the target refuses to start.
+- `dpx-deck-splash.service` no longer auto-enabled — it's only ever started by the fallback above or by an `OnFailure` recovery, never racing the mode service for `multi-user.target` on its own.
+- **Not yet live-verified** (no device access this pass) — needs a real boot-cycle test: confirm the persisted mode wins every time, and force a mode service into permanent failure (e.g. `systemctl kill` past its restart burst) to confirm splash actually comes back.
+- Also worth re-checking against this fix once live: the reported "device is already in a mode but not started, hitting GO does not start the thing" symptom. `execute_staged()`'s `mode_dead` check in `dpx-deck-splash.py` already looks correct on paper (re-applies if the persisted mode's service isn't actually active) — this may already have been a downstream effect of the same boot race rather than a separate bug. Confirm rather than assume once testable.
+
 Dashboard's own boot-time auto-start (the "and dashboard on/off" half of #12) is
 simpler and independent of the above — it's just "should `dpx-dashboard.service`
 be enabled or not," already a persisted systemd state via `set_dashboard_enabled()`,
@@ -128,3 +135,41 @@ new for it.
 5. #11 + #12 together (the real design work — biggest single piece here)
 6. #17's "doesn't launch" half — verify once a fresh build exists (falls out of #11/#12 work naturally, since that's a rebuild anyway)
 7. #10 and #17's "doesn't reflect state" half — both need live device access, batch them into one SSH session once available
+
+---
+
+## #18 — GitHub Actions artifact storage cleanup (housekeeping)
+
+**2026-09-05: found and fixed once.** `gh api repos/.../actions/artifacts` showed
+10 artifacts totaling 12.1 GiB, ALL already past their `retention-days: 3`
+expiration (the oldest by three weeks) but never garbage-collected by GitHub —
+they were still billing against the 2GB storage cap the whole time. Deleted
+manually via `gh api -X DELETE .../actions/artifacts/<id>`, storage now at 0.
+
+Not a one-time cleanup — this will silently refill: `release-action.yaml`'s
+nightly cron (`0 6 * * *`) builds new images whenever the Buttons mirror has an
+unreleased version, `armbian-builder.yaml`/`raspios-builder.yaml` upload
+1-1.7GB artifacts per board/variant, and the `release` job downloads them into
+a GitHub Release but never deletes the source CI artifacts afterward — nothing
+sweeps them once `retention-days` lapses, they just sit there until someone
+notices.
+
+**Squash it down properly, don't just re-delete manually next time:**
+- Add a step at the end of `release-action.yaml`'s `release` job (after the
+  release is successfully created) that deletes the just-downloaded build
+  artifacts immediately via `gh api -X DELETE` — once they're in the
+  release as `.img.gz` assets, the raw CI artifacts serve no purpose.
+- Consider a small separate scheduled workflow (e.g. weekly) that lists and
+  deletes any artifact past its `expires_at`, as a safety net for stray
+  manual/debug-branch builds (feature branches, force-rebuilds) that don't
+  go through the release job at all.
+- Low priority relative to #10-#17, but cheap to build once — fold into
+  the work whenever convenient, or do it standalone.
+
+**Implemented 2026-09-05**: `release-action.yaml`'s `release` job now deletes
+its own run's CI artifacts immediately after the release is created
+(`actions: write` added to its permissions). New `artifact-sweep.yaml`
+workflow runs weekly (Sunday 05:00 UTC) plus `workflow_dispatch`, deleting
+any artifact anywhere in the repo already past its own `expires_at` — the
+same category of already-expired-but-uncollected artifact found and
+manually cleared this session.
