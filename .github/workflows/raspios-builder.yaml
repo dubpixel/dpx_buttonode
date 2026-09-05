@@ -41,7 +41,12 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # See armbian-builder.yaml's build job for why: native arm64 runner
+    # lets Packer's arm-image plugin skip QEMU/binfmt entirely
+    # (image_arch in dpx-buttonode.pkr.hcl matches the host arch), instead
+    # of emulating every chroot apt-get/dpkg call via qemu-aarch64-static
+    # on an x86_64 runner.
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     outputs:
@@ -51,11 +56,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # ARM emulation is required to chroot into the ARM64 image, same as
-      # the Armbian pipeline -- unrelated to which OS built the base image.
-      - name: Install QEMU user-static
-        run: sudo apt-get update -q && sudo apt-get install -y qemu-user-static
 
       # ── Download Bitfocus Buttons package from mirror ──────────────────────
       - name: Download Buttons USB Relay package from mirror

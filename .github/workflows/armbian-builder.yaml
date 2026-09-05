@@ -283,7 +283,14 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Native arm64 runner -- the images we build are arm64, and Packer's
+    # arm-image plugin skips its QEMU/binfmt chroot steps entirely when
+    # image_arch (set in dpx-buttonode.pkr.hcl) matches the host's actual
+    # runtime arch (pkg/builder/builder.go: `!ImageArch.IsNative()`). On
+    # ubuntu-latest (x86_64), every apt-get/dpkg inside the chroot ran
+    # through qemu-aarch64-static emulation, which is commonly 5-10x
+    # slower than native for that kind of CPU-bound work.
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     outputs:
@@ -293,10 +300,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # ARM emulation is required to chroot into the ARM64 Armbian image
-      - name: Install QEMU user-static
-        run: sudo apt-get update -q && sudo apt-get install -y qemu-user-static
 
       # ── Download Bitfocus Buttons package from mirror ──────────────────────
       - name: Download Buttons USB Relay package from mirror
