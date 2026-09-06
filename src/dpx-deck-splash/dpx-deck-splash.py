@@ -298,6 +298,39 @@ def render_key(deck, text, font_size=16, bg=(0, 0, 0), fg="white"):
     return PILHelper.to_native_key_format(deck, image)
 
 
+def render_password_key(deck, password, bg=(0, 0, 0), fg="white", chunk=4):
+    """Like render_key(), but wraps `password` into fixed-width chunks
+    (default 4 chars) on separate stacked lines instead of shrinking one
+    line to fit the whole string. A 10-char password on a single line
+    shrinks small enough that similar-looking characters (5 vs S, 0 vs O)
+    become genuinely hard to tell apart on the deck's tiny screen --
+    confirmed live 2026-09-06, misread as a transcription error while
+    reading it off. Wrapping means each line only has to fit `chunk`
+    characters, so the font can stay much larger."""
+    image = PILHelper.create_key_image(deck)
+    draw = ImageDraw.Draw(image)
+    if bg != (0, 0, 0):
+        draw.rectangle([(0, 0), image.size], fill=bg)
+    lines = [password[i:i + chunk] for i in range(0, len(password), chunk)]
+    margin = image.width * 0.12
+    size = 24
+    while size > 7:
+        font = load_font(size)
+        widths = [draw.textbbox((0, 0), line, font=font)[2] for line in lines]
+        line_h = draw.textbbox((0, 0), "Ag", font=font)[3]
+        total_h = line_h * len(lines)
+        if max(widths) <= image.width - margin and total_h <= image.height - margin:
+            break
+        size -= 1
+    y = (image.height - line_h * len(lines)) / 2
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        w = bbox[2] - bbox[0]
+        draw.text(((image.width - w) / 2, y), line, font=font, fill=fg)
+        y += line_h
+    return PILHelper.to_native_key_format(deck, image)
+
+
 def blank_key(deck):
     image = PILHelper.create_key_image(deck)
     return PILHelper.to_native_key_format(deck, image)
@@ -636,7 +669,7 @@ def make_key_callback(state):
                 return  # nothing left to reveal — password already changed
             state["ssh_revealed"] = not state.get("ssh_revealed", False)
             if state["ssh_revealed"]:
-                deck.set_key_image(key, render_key(deck, pw, font_size=13, bg=SSH_PW_COLOR))
+                deck.set_key_image(key, render_password_key(deck, pw, bg=SSH_PW_COLOR))
             else:
                 draw_ssh_key(deck, key)
             return
