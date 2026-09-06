@@ -1027,16 +1027,26 @@ def switch_mode(new_mode):
     run(["systemctl", "stop",    old_svc])
     run(["systemctl", "disable", old_svc])
     run(["systemctl", "enable",  new_svc])
-    # Nudge udev before handing the deck to any HID-consuming mode.
-    # Confirmed live 2026-08-29: heavy mode-switch churn can leave the
-    # kernel holding the Stream Deck bound but with its /dev/hidraw* node
-    # missing -- invisible to libusb-based consumers (Satellite, this
-    # process itself) but fatal to Companion's hidraw-only surface
-    # driver. Previously only fixed by manually hitting /power-cycle-deck
-    # after the fact; baking it into every switch means it's already
-    # fixed by the time the new mode's service starts, not something
-    # that has to be noticed and triggered separately.
-    udev_retrigger()
+    # Recover hidraw before handing the deck to any HID-consuming mode.
+    # Confirmed live 2026-09-06 (issue #10): a libusb consumer (Buttons/
+    # Satellite/deck-splash) detaching the kernel driver to claim the
+    # device removes /dev/hidraw* until a real USB unbind/bind -- the
+    # gentle udev_retrigger() alone does NOT bring it back (verified: ran
+    # it in isolation, hidraw stayed missing). Companion's surface module
+    # only scans for hidraw devices once at startup, so if it's missing
+    # right then, Companion silently finds nothing and never retries --
+    # this was the actual root cause of "Companion doesn't pick up the
+    # Stream Deck after a mode switch," not a permissions or timing issue.
+    # usb_power_cycle() already tries the gentle retrigger first and only
+    # escalates to the disruptive unbind/bind if that alone wasn't enough
+    # (see its docstring), so this is a safe drop-in -- previously that
+    # full fallback was only reachable manually via /power-cycle-deck,
+    # never from the mode-switch path itself.
+    deck_path = find_streamdeck_usb_path()
+    if deck_path:
+        usb_power_cycle(deck_path)
+    else:
+        udev_retrigger()
     _, err, rc = run(["systemctl", "start", new_svc])
     if rc != 0:
         return False, f"Failed to start {new_svc}: {err}"
