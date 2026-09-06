@@ -1055,6 +1055,27 @@ def switch_mode(new_mode):
     return True, f"Switched to {LABELS[new_mode]}"
 
 
+def stop_current_mode():
+    """Stop whichever mode service is currently running and show the deck
+    splash instead -- a pure 'go idle' action, deliberately distinct from
+    switch_mode(): it does NOT touch /etc/dpx-mode or enable/disable
+    anything, so the persisted mode is unchanged and a later GO press (or
+    a reboot, via dpx-mode-select.service) still resumes it. Since
+    dpx-mode-select.service only runs once at boot, stopping a mode
+    service manually would otherwise leave the deck dark with nothing to
+    bring splash back -- this starts it explicitly instead of relying on
+    that boot-time-only coordinator."""
+    SVC_MAP = {
+        "buttons":   "bitfocus-buttons-usb-relay",
+        "satellite": "satellite",
+        "companion": "companion",
+    }
+    svc = SVC_MAP.get(get_dpx_mode(), "bitfocus-buttons-usb-relay")
+    run(["systemctl", "stop", svc])
+    run(["systemctl", "start", "dpx-deck-splash"])
+    return True, "Stopped -- deck splash active"
+
+
 # ── SSH management ───────────────────────────────────────────────────────────
 #
 # Ships with SSH DISABLED by default (see dpx-buttonode.pkr.hcl) — this is
@@ -1607,6 +1628,13 @@ def render_mode(alert="", alert_cls="a-ok"):
         f'<span style="font-size:12px;color:#484f58;padding:8px 14px;border:1px dashed #30363d;border-radius:6px;display:inline-block" title="Not installed — Full image required">Companion (Full only)</span>',
     ])
 
+    any_svc_active = bs or ss or (cs and has_companion)
+    stop_btn = (
+        f'<form method="POST" action="/mode/stop" style="display:inline;margin-left:6px">'
+        f'<button type="submit" class="btn btn-w" style="font-size:12px">⏹ Stop (show splash)</button></form>'
+        if any_svc_active else ""
+    )
+
     companion_link = (
         f'<p class="note" style="margin-top:10px">Companion web UI: '
         f'<a href="http://{esc(ip)}:{COMPANION_PORT}" target="_blank">http://{esc(ip)}:{COMPANION_PORT}</a></p>'
@@ -1624,7 +1652,7 @@ def render_mode(alert="", alert_cls="a-ok"):
               padding:18px 20px;margin-bottom:16px">
     <div style="font-size:20px;font-weight:700;color:#f0f6ff;margin-bottom:6px">{badge_text}</div>
     <div style="font-size:12px;color:#8b949e;margin-bottom:14px">/etc/dpx-mode = <code>{esc(mode)}</code></div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px">{btns}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">{btns}{stop_btn}</div>
     {companion_link}
   </div>
 </div>
@@ -2106,6 +2134,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/mode":
             new_mode = params.get("new_mode", "").strip()
             ok, msg = switch_mode(new_mode)
+            self.html(render_mode(
+                alert=("✓ " if ok else "✗ ") + esc(msg),
+                alert_cls="a-ok" if ok else "a-err",
+            ))
+
+        # ── /mode/stop ────────────────────────────────────────────────────
+        elif path == "/mode/stop":
+            ok, msg = stop_current_mode()
             self.html(render_mode(
                 alert=("✓ " if ok else "✗ ") + esc(msg),
                 alert_cls="a-ok" if ok else "a-err",
