@@ -366,6 +366,9 @@ Every device runs a lightweight web UI on **port 8080**:
 http://dpx-buttonode-XXXX.local:8080
 ```
 
+<details>
+<summary>📸 Screenshots — all 8 tabs</summary>
+
 <div align="center">
   <img src="images/001_status.jpe" alt="Status tab" width="480">
   <img src="images/002_hostname.jpe" alt="Hostname tab" width="480">
@@ -379,6 +382,8 @@ http://dpx-buttonode-XXXX.local:8080
   <img src="images/007_ssh.jpe" alt="SSH tab" width="480">
   <img src="images/008_updates.jpe" alt="Updates tab" width="480">
 </div>
+
+</details>
 
 A persistent status bar (version, active mode, live RAM — color-coded) shows across every tab, not just Status.
 
