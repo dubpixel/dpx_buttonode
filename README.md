@@ -33,11 +33,7 @@
 [![LinkedIn][linkedin-shield]][linkedin-url]
 [![Latest Release](https://img.shields.io/github/v/release/dubpixel/dpx_buttonode?label=dpx-buttonode&color=blue&style=flat-square)](https://github.com/dubpixel/dpx_buttonode/releases/latest)
 </div>
-<!-- PROJECT LOGO -->
 <div align="center">
-  <a href="https://github.com/dubpixel/dpx_buttonode">
-    <img src="images/logo.png" alt="Logo" height="120">
-  </a>
 <h1 align="center">dpx-buttonode</h1>
 <h3 align="center"><i>One image, three <a href="https://bitfocus.io/companion">Bitfocus Companion</a> modes — flash any ARM SBC or real Raspberry Pi 4/5, switch between <a href="https://github.com/bitfocus/companion-satellite">Satellite</a>, full Companion, or <a href="https://bitfocus.io/buttons">Buttons USB Relay</a> from the browser</i></h3>
   <p align="center">
@@ -48,6 +44,9 @@
     or, on the Full image variant, run full <a href="https://bitfocus.io/companion">Bitfocus Companion</a> itself.
     <a href="https://bitfocus.io/buttons">Bitfocus Buttons USB Relay</a> is also supported as a third mode.
     Switch between modes from the browser — no re-flash needed.
+    Every unit auto-discovers every other <code>dpx-buttonode-*</code> on the LAN via mDNS — the web UI's
+    Nodes tab lists them all with a link straight to each one's own config panel, no IP hunting needed
+    when you've got a fleet of these.
     An opt-in <strong>Companion Dashboard</strong> kiosk display can run alongside any mode on units with a
     screen attached.
     Write the image, plug in your Stream Deck, power on — done.
@@ -66,7 +65,7 @@
 </div>
 
 <div align="center">
-  <img src="images/front.png" alt="dpx-buttonode hardware" width="600">
+  <img src="images/009_deck_splash.jpg" alt="dpx-buttonode running on real hardware — Stream Deck config screen" width="600">
 </div>
 
    <br />
@@ -100,6 +99,10 @@
 <!-- ABOUT THE PROJECT -->
 <details>
 <summary><h3>About The Project</h3></summary>
+
+<div align="center">
+  <img src="images/011_deck_hardware_unlit.jpg" alt="dpx-buttonode enclosure and Stream Deck, unpowered" width="500">
+</div>
 
 This project extends the architecture of <a href="https://github.com/elliotmatson/companion-satellite-armbian">companion-satellite-armbian</a>
 to run on ARM single-board computers that aren't Raspberry Pis — turning any supported board into a
@@ -262,8 +265,8 @@ screen — no web UI or SSH needed for initial setup:
 - **NET** toggles staged DHCP ↔ static
 - **SUBNET** cycles `/24 /22 /16 /8`
 - Holding an **octet** key spins its value (locked unless NET is staged to static)
-- **D** (if Dashboard is installed) is a passive status indicator — red when Dashboard is actually
-  running, gray when installed but off
+- **D** (if Dashboard is installed) is press-to-toggle — press to turn Dashboard on/off directly from
+  the deck, no web UI needed; red when actually running, gray when installed but off
 - **SSH** (press-to-toggle) reveals the first-boot random root password — see
   [SSH into the device](#ssh-into-the-device) below
 - **GO** commits the staged mode + network together as one operation
@@ -842,6 +845,16 @@ Any board in [Armbian's supported hardware list](https://www.armbian.com/downloa
 </details>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<div align="center">
+  <a href="https://github.com/dubpixel/dpx_buttonode">
+    <img src="images/logo.png" alt="dpx logo" height="48">
+  </a>
+  <br>
+  <a href="https://github.com/dubpixel/dpx_buttonode/releases/latest">
+    <img src="https://img.shields.io/github/v/release/dubpixel/dpx_buttonode?label=dpx-buttonode&color=blue&style=flat-square" alt="Latest Release">
+  </a>
+</div>
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
