@@ -1,0 +1,35 @@
+name: Sweep expired Actions artifacts
+
+# Safety net for issue #18: release-action.yaml's own artifacts are
+# deleted immediately once they land in a release, but stray builds that
+# never go through that job (feature branches, force-rebuilds, manual
+# workflow_dispatch runs someone kicked off and forgot about) just sit
+# there. GitHub's own retention-days cleanup can lag by weeks in
+# practice -- confirmed 2026-09-05, 12.1GiB of artifacts sitting around
+# up to three weeks past their own expiry -- so this sweeps anything
+# already past expires_at rather than trusting GitHub to do it.
+on:
+  schedule:
+    - cron: '0 5 * * 0'  # weekly, Sunday 05:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete artifacts past their own expiry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOW=$(date -u +%s)
+          gh api "repos/${{ github.repository }}/actions/artifacts" --paginate \
+            --jq '.artifacts[] | [.id, .expires_at] | @tsv' | while IFS=$'\t' read -r id expires_at; do
+            [[ -z "$expires_at" || "$expires_at" == "null" ]] && continue
+            expires_epoch=$(date -u -d "$expires_at" +%s 2>/dev/null || echo 0)
+            if (( expires_epoch > 0 && expires_epoch < NOW )); then
+              echo "Deleting expired artifact $id (expired $expires_at)"
+              gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true
+            fi
+          done

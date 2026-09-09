@@ -279,6 +279,58 @@ def write_networkd_config(iface, mode, ip_cidr=None, gateway=None, dns="8.8.8.8"
          "systemctl", "restart", "dpx-buttonode-ui"])
 
 
+def write_nmcli_config(iface, mode, ip_cidr=None, gateway=None, dns="8.8.8.8"):
+    """Apply network config through NetworkManager. `nmcli connection
+    modify` writes the change straight to the connection's on-disk
+    profile (/etc/NetworkManager/system-connections/*.nmconnection), so
+    unlike the networkd path there's no separate config file to manage —
+    the same command that applies it live is what makes it persist."""
+    out, _, _ = run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"])
+    conn = ""
+    for line in out.splitlines():
+        parts = line.split(":")
+        if len(parts) >= 2 and "ethernet" in parts[1].lower():
+            conn = parts[0]
+            break
+    if not conn:
+        return
+    if mode == "dhcp":
+        run(["nmcli", "connection", "modify", conn,
+             "ipv4.method", "auto",
+             "ipv4.addresses", "",
+             "ipv4.gateway", "",
+             "ipv4.dns", ""])
+    else:
+        run(["nmcli", "connection", "modify", conn,
+             "ipv4.method", "manual",
+             "ipv4.addresses", ip_cidr,
+             "ipv4.gateway", gateway,
+             "ipv4.dns", dns])
+    run(["nmcli", "connection", "up", conn])
+    run(["systemctl", "reload-or-restart", "avahi-daemon"])
+    active_svc = {
+        "buttons": "bitfocus-buttons-usb-relay",
+        "satellite": "satellite",
+        "companion": "companion",
+    }.get(get_dpx_mode(), "bitfocus-buttons-usb-relay")
+    run(["systemctl", "restart", active_svc])
+    run(["systemd-run", "--no-block", "--quiet",
+         "systemctl", "restart", "dpx-buttonode-ui"])
+
+
+def apply_net_config(iface, mode, ip_cidr=None, gateway=None, dns="8.8.8.8"):
+    """Persist network config through whichever backend actually manages
+    this interface. Raspberry Pi OS defaults to NetworkManager; Armbian
+    defaults to systemd-networkd/Netplan. Writing networkd files on an
+    nmcli-managed box doesn't survive reboot — NetworkManager reasserts
+    its own connection profile on boot, reverting straight back to DHCP
+    (dpx#14) — so the two paths need picking, not just one used blindly."""
+    if nmcli_available():
+        write_nmcli_config(iface, mode, ip_cidr, gateway, dns)
+    else:
+        write_networkd_config(iface, mode, ip_cidr, gateway, dns)
+
+
 def toggle_net():
     """Flip DHCP<->static. No argument needed — a caller with no way to
     type an address (a deck keypress) should have nothing to get wrong.
@@ -301,9 +353,9 @@ def toggle_net():
     if current["mode"] == "dhcp":
         if not current.get("gateway"):
             return False, "No gateway detected — can't safely pin a static config"
-        write_networkd_config(iface, "static", current["ip_cidr"], current["gateway"], current["dns"])
+        apply_net_config(iface, "static", current["ip_cidr"], current["gateway"], current["dns"])
         return True, f"Pinned static {current['ip_cidr']}"
-    write_networkd_config(iface, "dhcp")
+    apply_net_config(iface, "dhcp")
     return True, "Switched to DHCP"
 
 
@@ -334,7 +386,7 @@ def pin_static(cidr_str):
     else:
         prefix = current["ip_cidr"].split("/")[-1] if "/" in current["ip_cidr"] else "24"
     ip_cidr = f"{ip_str}/{prefix}"
-    write_networkd_config(iface, "static", ip_cidr, current["gateway"], current["dns"])
+    apply_net_config(iface, "static", ip_cidr, current["gateway"], current["dns"])
     return True, f"Pinned static {ip_cidr}"
 
 
@@ -644,12 +696,19 @@ def render_status(alert="", alert_cls="a-ok"):
     {svc_label}
     {mode_detail}</div>"""
 
+    # Only shown when Dashboard was actually installed on this image (#20)
+    dashboard_card = ""
+    if dashboard_installed():
+        dash_on = dashboard_enabled()
+        dashboard_card = f"""  <div class="card"><div class="lbl">Dashboard</div>
+    <div class="val {'on' if dash_on else 'off'}" style="font-size:14px">{'active' if dash_on else 'inactive'}</div></div>"""
+
     grid = f"""
 <div class="grid">
   <div class="card" style="grid-column:span 2"><div class="lbl">Hostname</div>
     <div class="val" style="font-size:15px">{host}</div></div>
-  <div class="card"><div class="lbl">IP Address</div>
-    <div class="val">{ip}</div></div>
+  <div class="card" style="grid-column:span 2"><div class="lbl">IP Address</div>
+    <div class="val" style="font-size:15px">{ip}</div></div>
   <div class="card"><div class="lbl">MAC</div>
     <div class="val" style="font-size:12px">{mac}</div></div>
   <div class="card"><div class="lbl">Network</div>
@@ -661,6 +720,7 @@ def render_status(alert="", alert_cls="a-ok"):
     <div class="val" style="font-size:14px">{uptime}</div></div>
   <div class="card"><div class="lbl">RAM</div>
     <div class="val" style="font-size:14px;color:{ram_color}">{esc(ram_str)}</div></div>
+{dashboard_card}
 </div>
 <div class="sec"><h2>USB Devices</h2>
   <ul class="usb">
@@ -837,6 +897,7 @@ def dashboard_section():
     <button type="submit" class="btn {'btn-w' if on else 'btn-p'}">{label}</button>
   </form>
   {'<form method="POST" action="/dashboard/fullscreen" style="display:inline"><button type="submit" class="btn">⛶ Toggle Fullscreen</button></form>' if on else ''}
+  {f'<a href="http://{esc(get_ip())}/control" target="_blank" class="btn" style="text-decoration:none;display:inline-block">⚙ Remote Config ↗</a>' if on else ''}
 </div>"""
 
 
@@ -974,22 +1035,76 @@ def switch_mode(new_mode):
     run(["systemctl", "stop",    old_svc])
     run(["systemctl", "disable", old_svc])
     run(["systemctl", "enable",  new_svc])
-    # Nudge udev before handing the deck to any HID-consuming mode.
-    # Confirmed live 2026-08-29: heavy mode-switch churn can leave the
-    # kernel holding the Stream Deck bound but with its /dev/hidraw* node
-    # missing -- invisible to libusb-based consumers (Satellite, this
-    # process itself) but fatal to Companion's hidraw-only surface
-    # driver. Previously only fixed by manually hitting /power-cycle-deck
-    # after the fact; baking it into every switch means it's already
-    # fixed by the time the new mode's service starts, not something
-    # that has to be noticed and triggered separately.
-    udev_retrigger()
+    # Recover hidraw before handing the deck to any HID-consuming mode.
+    # Confirmed live 2026-09-06 (issue #10): a libusb consumer (Buttons/
+    # Satellite/deck-splash) detaching the kernel driver to claim the
+    # device removes /dev/hidraw* until a real USB unbind/bind -- the
+    # gentle udev_retrigger() alone does NOT bring it back (verified: ran
+    # it in isolation, hidraw stayed missing). Companion's surface module
+    # only scans for hidraw devices once at startup, so if it's missing
+    # right then, Companion silently finds nothing and never retries --
+    # this was the actual root cause of "Companion doesn't pick up the
+    # Stream Deck after a mode switch," not a permissions or timing issue.
+    # usb_power_cycle() already tries the gentle retrigger first and only
+    # escalates to the disruptive unbind/bind if that alone wasn't enough
+    # (see its docstring), so this is a safe drop-in -- previously that
+    # full fallback was only reachable manually via /power-cycle-deck,
+    # never from the mode-switch path itself.
+    deck_path = find_streamdeck_usb_path()
+    if deck_path:
+        usb_power_cycle(deck_path)
+    else:
+        udev_retrigger()
     _, err, rc = run(["systemctl", "start", new_svc])
     if rc != 0:
         return False, f"Failed to start {new_svc}: {err}"
     MODE_FILE.write_text(new_mode + "\n")
     LABELS = {"buttons": "Buttons USB Relay", "satellite": "Companion Satellite", "companion": "Bitfocus Companion"}
     return True, f"Switched to {LABELS[new_mode]}"
+
+
+def stop_current_mode():
+    """Stop whichever mode service is currently running and show the deck
+    splash instead -- a pure 'go idle' action, deliberately distinct from
+    switch_mode(): it does NOT touch /etc/dpx-mode or enable/disable
+    anything, so the persisted mode is unchanged and a later GO press (or
+    a reboot, via dpx-mode-select.service) still resumes it. Since
+    dpx-mode-select.service only runs once at boot, stopping a mode
+    service manually would otherwise leave the deck dark with nothing to
+    bring splash back -- this starts it explicitly instead of relying on
+    that boot-time-only coordinator."""
+    SVC_MAP = {
+        "buttons":   "bitfocus-buttons-usb-relay",
+        "satellite": "satellite",
+        "companion": "companion",
+    }
+    svc = SVC_MAP.get(get_dpx_mode(), "bitfocus-buttons-usb-relay")
+    run(["systemctl", "stop", svc])
+    run(["systemctl", "start", "dpx-deck-splash"])
+    return True, "Stopped -- deck splash active"
+
+
+MODE_AUTOSTART_MARKER = "/var/lib/dpx-mode-autostart-disabled"
+
+
+def mode_autostart_enabled():
+    """True unless the marker file is present -- absent (the default on a
+    fresh image) means dpx-mode-select.service starts the persisted mode
+    at boot, matching the Mode tab checkbox defaulting to checked."""
+    return not Path(MODE_AUTOSTART_MARKER).exists()
+
+
+def set_mode_autostart_enabled(enable):
+    """Toggle whether dpx-mode-select.service starts the persisted mode
+    at boot, or always falls back to the deck splash instead. Requested
+    directly: some setups want to land on splash every boot and switch
+    modes manually rather than auto-resuming."""
+    marker = Path(MODE_AUTOSTART_MARKER)
+    if enable:
+        marker.unlink(missing_ok=True)
+    else:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
 
 
 # ── SSH management ───────────────────────────────────────────────────────────
@@ -1544,11 +1659,28 @@ def render_mode(alert="", alert_cls="a-ok"):
         f'<span style="font-size:12px;color:#484f58;padding:8px 14px;border:1px dashed #30363d;border-radius:6px;display:inline-block" title="Not installed — Full image required">Companion (Full only)</span>',
     ])
 
+    any_svc_active = bs or ss or (cs and has_companion)
+    stop_btn = (
+        f'<form method="POST" action="/mode/stop" style="display:inline;margin-left:6px">'
+        f'<button type="submit" class="btn btn-w" style="font-size:12px">⏹ Stop (show splash)</button></form>'
+        if any_svc_active else ""
+    )
+
     companion_link = (
         f'<p class="note" style="margin-top:10px">Companion web UI: '
         f'<a href="http://{esc(ip)}:{COMPANION_PORT}" target="_blank">http://{esc(ip)}:{COMPANION_PORT}</a></p>'
         if mode == "companion" and cs else ""
     )
+
+    autostart_on = mode_autostart_enabled()
+    autostart_toggle = f"""
+  <form method="POST" action="/mode/autostart" style="margin-top:12px">
+    <label style="font-size:12px;color:#8b949e;display:flex;align-items:center;gap:6px">
+      <input type="checkbox" name="enabled" value="1"{' checked' if autostart_on else ''}>
+      Autostart last mode on boot (unchecked: always land on the deck splash)
+    </label>
+    <button type="submit" class="btn" style="font-size:11px;margin-top:6px">Save</button>
+  </form>"""
 
     bs_badge = '<span class="badge badge-on">active</span>' if bs else '<span class="badge badge-off">inactive</span>'
     ss_badge = '<span class="badge badge-on">active</span>' if ss else '<span class="badge badge-off">inactive</span>'
@@ -1561,8 +1693,9 @@ def render_mode(alert="", alert_cls="a-ok"):
               padding:18px 20px;margin-bottom:16px">
     <div style="font-size:20px;font-weight:700;color:#f0f6ff;margin-bottom:6px">{badge_text}</div>
     <div style="font-size:12px;color:#8b949e;margin-bottom:14px">/etc/dpx-mode = <code>{esc(mode)}</code></div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px">{btns}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">{btns}{stop_btn}</div>
     {companion_link}
+    {autostart_toggle}
   </div>
 </div>
 <div class="sec">
@@ -2046,6 +2179,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.html(render_mode(
                 alert=("✓ " if ok else "✗ ") + esc(msg),
                 alert_cls="a-ok" if ok else "a-err",
+            ))
+
+        # ── /mode/stop ────────────────────────────────────────────────────
+        elif path == "/mode/stop":
+            ok, msg = stop_current_mode()
+            self.html(render_mode(
+                alert=("✓ " if ok else "✗ ") + esc(msg),
+                alert_cls="a-ok" if ok else "a-err",
+            ))
+
+        # ── /mode/autostart ──────────────────────────────────────────────
+        elif path == "/mode/autostart":
+            # Unchecked checkboxes simply omit the field from the POST body
+            enable = params.get("enabled", "") == "1"
+            set_mode_autostart_enabled(enable)
+            self.html(render_mode(
+                alert="✓ " + ("Autostart enabled" if enable else "Autostart disabled -- will always land on splash"),
+                alert_cls="a-ok",
             ))
 
         # ── /satellite-config ──────────────────────────────────────────
