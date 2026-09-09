@@ -696,6 +696,13 @@ def render_status(alert="", alert_cls="a-ok"):
     {svc_label}
     {mode_detail}</div>"""
 
+    # Only shown when Dashboard was actually installed on this image (#20)
+    dashboard_card = ""
+    if dashboard_installed():
+        dash_on = dashboard_enabled()
+        dashboard_card = f"""  <div class="card"><div class="lbl">Dashboard</div>
+    <div class="val {'on' if dash_on else 'off'}" style="font-size:14px">{'active' if dash_on else 'inactive'}</div></div>"""
+
     grid = f"""
 <div class="grid">
   <div class="card" style="grid-column:span 2"><div class="lbl">Hostname</div>
@@ -713,6 +720,7 @@ def render_status(alert="", alert_cls="a-ok"):
     <div class="val" style="font-size:14px">{uptime}</div></div>
   <div class="card"><div class="lbl">RAM</div>
     <div class="val" style="font-size:14px;color:{ram_color}">{esc(ram_str)}</div></div>
+{dashboard_card}
 </div>
 <div class="sec"><h2>USB Devices</h2>
   <ul class="usb">
