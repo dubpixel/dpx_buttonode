@@ -146,6 +146,13 @@ echo "==> OnFailure=dpx-deck-splash.service drop-ins installed for all 3 mode se
 cat > /usr/local/bin/dpx-mode-select.sh << 'SCRIPT'
 #!/usr/bin/env bash
 set -u
+# Existence-based toggle, same convention as /var/lib/dpx-hostname-set --
+# absent (the default on a fresh image) means autostart is ON, matching
+# the web UI's Mode tab checkbox defaulting to checked.
+if [ -e /var/lib/dpx-mode-autostart-disabled ]; then
+    systemctl start dpx-deck-splash.service
+    exit 0
+fi
 MODE="$(cat /etc/dpx-mode 2>/dev/null || echo "buttons")"
 case "$MODE" in
     buttons)   SVC="bitfocus-buttons-usb-relay.service" ;;

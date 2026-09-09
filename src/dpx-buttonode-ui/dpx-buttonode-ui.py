@@ -1084,6 +1084,29 @@ def stop_current_mode():
     return True, "Stopped -- deck splash active"
 
 
+MODE_AUTOSTART_MARKER = "/var/lib/dpx-mode-autostart-disabled"
+
+
+def mode_autostart_enabled():
+    """True unless the marker file is present -- absent (the default on a
+    fresh image) means dpx-mode-select.service starts the persisted mode
+    at boot, matching the Mode tab checkbox defaulting to checked."""
+    return not Path(MODE_AUTOSTART_MARKER).exists()
+
+
+def set_mode_autostart_enabled(enable):
+    """Toggle whether dpx-mode-select.service starts the persisted mode
+    at boot, or always falls back to the deck splash instead. Requested
+    directly: some setups want to land on splash every boot and switch
+    modes manually rather than auto-resuming."""
+    marker = Path(MODE_AUTOSTART_MARKER)
+    if enable:
+        marker.unlink(missing_ok=True)
+    else:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+
+
 # ── SSH management ───────────────────────────────────────────────────────────
 #
 # Ships with SSH DISABLED by default (see dpx-buttonode.pkr.hcl) — this is
@@ -1649,6 +1672,16 @@ def render_mode(alert="", alert_cls="a-ok"):
         if mode == "companion" and cs else ""
     )
 
+    autostart_on = mode_autostart_enabled()
+    autostart_toggle = f"""
+  <form method="POST" action="/mode/autostart" style="margin-top:12px">
+    <label style="font-size:12px;color:#8b949e;display:flex;align-items:center;gap:6px">
+      <input type="checkbox" name="enabled" value="1"{' checked' if autostart_on else ''}>
+      Autostart last mode on boot (unchecked: always land on the deck splash)
+    </label>
+    <button type="submit" class="btn" style="font-size:11px;margin-top:6px">Save</button>
+  </form>"""
+
     bs_badge = '<span class="badge badge-on">active</span>' if bs else '<span class="badge badge-off">inactive</span>'
     ss_badge = '<span class="badge badge-on">active</span>' if ss else '<span class="badge badge-off">inactive</span>'
     cs_badge = ('<span class="badge badge-on">active</span>' if cs else '<span class="badge badge-off">inactive</span>') if has_companion else '<span class="badge badge-off">not installed</span>'
@@ -1662,6 +1695,7 @@ def render_mode(alert="", alert_cls="a-ok"):
     <div style="font-size:12px;color:#8b949e;margin-bottom:14px">/etc/dpx-mode = <code>{esc(mode)}</code></div>
     <div style="display:flex;flex-wrap:wrap;gap:8px">{btns}{stop_btn}</div>
     {companion_link}
+    {autostart_toggle}
   </div>
 </div>
 <div class="sec">
@@ -2153,6 +2187,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.html(render_mode(
                 alert=("✓ " if ok else "✗ ") + esc(msg),
                 alert_cls="a-ok" if ok else "a-err",
+            ))
+
+        # ── /mode/autostart ──────────────────────────────────────────────
+        elif path == "/mode/autostart":
+            # Unchecked checkboxes simply omit the field from the POST body
+            enable = params.get("enabled", "") == "1"
+            set_mode_autostart_enabled(enable)
+            self.html(render_mode(
+                alert="✓ " + ("Autostart enabled" if enable else "Autostart disabled -- will always land on splash"),
+                alert_cls="a-ok",
             ))
 
         # ── /satellite-config ──────────────────────────────────────────
