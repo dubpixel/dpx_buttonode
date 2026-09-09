@@ -298,14 +298,21 @@ This uploads the file to the `buttons-deb-mirror` release in this repo. Done.
 
 #### 3. Let CI do the rest (or trigger immediately)
 
-The daily scheduled check at 06:00 UTC will detect the new version and automatically build all boards and publish a release.
+The daily scheduled check at 06:00 UTC will detect the new version and automatically build the Armbian
+boards (`rockpi-s`, `orangepizero3`) and publish a release. Raspberry Pi 4/5 is **not** part of this —
+it's a separate, manual-dispatch-only pipeline (`raspios-builder.yaml`), since real Pi hardware runs on
+its own OS image rather than Armbian. Trigger a Pi 4/5 build yourself when you want one:
+```bash
+gh workflow run raspios-builder.yaml --repo dubpixel/dpx_buttonode -f variant=full
+```
 
-To trigger it **right now** instead of waiting:
+To trigger the Armbian boards **right now** instead of waiting for the schedule:
 ```bash
 gh workflow run release-action.yaml --repo dubpixel/dpx_buttonode
 ```
 
-Watch it: **Actions → Release — dpx-buttonode Images → latest run**
+Watch it: **Actions → Release — dpx-buttonode Images → latest run** (Armbian) or **Actions → Build
+Raspberry Pi OS + dpx-buttonode Image → latest run** (Pi 4/5)
 
 ---
 
@@ -662,16 +669,24 @@ This project uses a two-stage pipeline to produce flash-ready images for ARM SBC
 #### The pattern
 
 ```
-GitHub Actions runner (x86)
+GitHub Actions runner (arm64 or x86)
   └─ 1. Build Armbian base image for target board
-  └─ 2. Packer chroots into image via QEMU
+  └─ 2. Packer chroots into image
        └─ copies your software in
        └─ installs it
        └─ configures it (hostname, services, etc.)
   └─ 3. Compress and publish the image
 ```
 
-No cross-compilation. No physical board needed. Runs entirely on standard x86 CI runners.
+No cross-compilation. No physical board needed.
+
+**Use a native `arm64` GitHub-hosted runner if you can** (`runs-on: ubuntu-24.04-arm`, free on public
+repos). Set `image_arch = "arm64"` in the Packer source block and the `arm-image` plugin skips QEMU
+emulation for the chroot entirely — confirmed live on this project: the actual provisioning step
+(apt-get/dpkg inside the chroot) went from **38–65 minutes to under 2 minutes** switching from an x86
+runner + QEMU to a native arm64 one. QEMU user-mode translation is genuinely that much slower for
+CPU-bound work like package installs, not just a little. Fall back to an x86 runner + `qemu-user-static`
+only if arm64 runners aren't available to you.
 
 ---
 
@@ -705,7 +720,8 @@ source "arm-image" "armbian" {
   iso_url         = var.url
   target_image_size = 5000000000        # 5 GB — adjust as needed
   output_filename = "output/image.img"
-  qemu_binary     = "qemu-aarch64-static"
+  image_arch      = "arm64"             # lets the plugin skip QEMU on a native arm64 runner
+  qemu_binary     = "qemu-aarch64-static"  # still needed even on arm64 -- see note below
   image_mounts    = ["/"]
 
   # Required for DNS to work inside the chroot
@@ -735,8 +751,14 @@ build {
       # Disable BOTH units -- ssh.socket alone keeps systemd listening on
       # :22 and lazily starting ssh.service on demand (socket activation),
       # so disabling only ssh.service does not actually disable SSH.
-      "systemctl disable --now ssh.socket || true",
-      "systemctl disable --now ssh.service || true",
+      # NO --now here: it's meaningless at image-build time anyway
+      # (nothing is actually running inside the chroot), and newer
+      # systemd (confirmed on Raspberry Pi OS Trixie) hard-refuses
+      # --now inside a chroot outright, unlike Armbian's older systemd
+      # which just silently no-ops it. Plain disable removes the
+      # enable symlink, which is all that's needed.
+      "systemctl disable ssh.socket || true",
+      "systemctl disable ssh.service || true",
     ]
   }
 
@@ -780,47 +802,57 @@ apt-get clean
 #### Step 3 — Wire it into GitHub Actions
 
 ```yaml
-- name: Install QEMU (required for ARM chroot on x86 runners)
-  run: sudo apt-get install -y qemu-user-static
+jobs:
+  build:
+    # Native arm64 (free on public repos) -- see "The pattern" above for why.
+    # Use ubuntu-latest (x86) instead if arm64 runners aren't available to you.
+    runs-on: ubuntu-24.04-arm
+    steps:
+    # Still needed even on an arm64 runner: Packer's Prepare() step
+    # unconditionally resolves a qemu_binary path via exec.LookPath
+    # regardless of whether it'll actually be used -- only the actual
+    # emulation gets skipped on native arch, not this install.
+    - name: Install QEMU
+      run: sudo apt-get install -y qemu-user-static
 
-- name: Build Armbian base image
-  run: |
-    git clone --depth=1 https://github.com/armbian/build build
-    sudo ./build/compile.sh build \
-      BOARD=your-board-id \
-      BRANCH=current \
-      RELEASE=noble \
-      BUILD_MINIMAL=yes \
-      KERNEL_CONFIGURE=no \
-      COMPRESS_OUTPUTIMAGE=no
-    sudo mv build/output/images/*.img build/output/images/armbian.img
+    - name: Build Armbian base image
+      run: |
+        git clone --depth=1 https://github.com/armbian/build build
+        sudo ./build/compile.sh build \
+          BOARD=your-board-id \
+          BRANCH=current \
+          RELEASE=noble \
+          BUILD_MINIMAL=yes \
+          KERNEL_CONFIGURE=no \
+          COMPRESS_OUTPUTIMAGE=no
+        sudo mv build/output/images/*.img build/output/images/armbian.img
 
-- name: Install Packer
-  run: |
-    wget -qO - https://apt.releases.hashicorp.com/gpg \
-      | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
-      https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
-      | sudo tee /etc/apt/sources.list.d/hashicorp.list
-    sudo apt-get update -q && sudo apt-get install -y packer
+    - name: Install Packer
+      run: |
+        wget -qO - https://apt.releases.hashicorp.com/gpg \
+          | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+          https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
+          | sudo tee /etc/apt/sources.list.d/hashicorp.list
+        sudo apt-get update -q && sudo apt-get install -y packer
 
-- name: Run Packer
-  run: |
-    sudo packer init your-software.pkr.hcl
-    sudo packer build \
-      -var "url=build/output/images/armbian.img" \
-      -var "deb_path=path/to/your-software.deb" \
-      your-software.pkr.hcl
+    - name: Run Packer
+      run: |
+        sudo packer init your-software.pkr.hcl
+        sudo packer build \
+          -var "url=build/output/images/armbian.img" \
+          -var "deb_path=path/to/your-software.deb" \
+          your-software.pkr.hcl
 
-- name: Compress image
-  run: |
-    sudo apt-get install -y zerofree
-    IMG="output/image.img"
-    LOOP=$(sudo losetup -fP --show "$IMG")
-    sudo e2fsck -fy "${LOOP}p1" || true
-    sudo zerofree "${LOOP}p1"
-    sudo losetup -d "$LOOP"
-    gzip -n "$IMG"
+    - name: Compress image
+      run: |
+        sudo apt-get install -y zerofree
+        IMG="output/image.img"
+        LOOP=$(sudo losetup -fP --show "$IMG")
+        sudo e2fsck -fy "${LOOP}p1" || true
+        sudo zerofree "${LOOP}p1"
+        sudo losetup -d "$LOOP"
+        gzip -n "$IMG"
 ```
 
 ---
@@ -829,7 +861,8 @@ apt-get clean
 
 | Thing | Why it matters |
 |---|---|
-| `qemu-user-static` must be installed **before** Packer runs | Packer uses it to emulate ARM64 instructions inside the chroot on your x86 runner |
+| Use `runs-on: ubuntu-24.04-arm` + `image_arch = "arm64"` if you can | Skips QEMU emulation for the chroot entirely -- ~20-30x faster provisioning, confirmed live on this project |
+| `qemu-user-static` must still be installed **before** Packer runs, even on arm64 | Packer's `Prepare()` step always resolves a `qemu_binary` path via `exec.LookPath`, regardless of whether emulation is actually used later -- only actual usage is skipped on native arch |
 | `additional_chroot_mounts = [["bind", "/run/systemd", "/run/systemd"]]` | Without this, DNS resolution inside the chroot fails and `apt-get` can't reach package servers |
 | All `packer` commands need `sudo` | The `arm-image` plugin creates loop devices and bind mounts — root required |
 | `sudo mv` the Armbian output | The Armbian build framework runs as root inside Docker, so output files are owned by root |

@@ -128,3 +128,25 @@ new for it.
 5. #11 + #12 together (the real design work — biggest single piece here)
 6. #17's "doesn't launch" half — verify once a fresh build exists (falls out of #11/#12 work naturally, since that's a rebuild anyway)
 7. #10 and #17's "doesn't reflect state" half — both need live device access, batch them into one SSH session once available
+
+---
+
+## Carried over from FIRST-BOOT-TEST-PLAN.md (removed 2026-09-09)
+
+That file tracked fresh-flash-only verification (first-boot logic gated behind
+marker files, e.g. `/var/lib/dpx-ssh-initialized`) separately from this plan.
+It's been folded in here since the two overlapped and this is the doc actually
+being kept current. Original items, still genuinely unchecked as of removal —
+**must be verified on a truly fresh flash, not the hand-patched test unit**:
+
+- [ ] Default mode on first boot is Satellite, not Buttons — never directly
+  observed on an actual fresh boot (mode was already switched by the time
+  testing started, each time this was attempted)
+- [ ] Web UI SSH tab, full end-to-end on a fresh unit — enable/disable halves
+  were verified as part of an earlier fix, but not the full
+  change-root-password flow on a genuinely fresh instance
+- [ ] Updates tab — real apply (deliberately never attempted on real hardware)
+- [ ] Updates tab — crash-recovery drill (deliberately never attempted)
+
+Whenever one of the fresh Pi 4/5 or rockpi-s builds from this plan's work gets
+a real from-blank-SD flash, walk these four before considering it validated.
