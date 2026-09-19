@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dpx-buttonode — user manual</title>
+<meta name="description" content="End-user manual for dpx-buttonode: flashing, the Stream Deck config screen, mode switching, network setup, Companion Dashboard, and troubleshooting.">
+<link rel="icon" href="images/fav_icon.png">
+<link rel="stylesheet" href="manual.css">
+</head>
+<body>
+<a class="skip-link" href="#quickstart">Skip to content</a>
+
+<header class="topbar">
+  <a class="mark" href="#top">
+    <img src="images/logo.png" alt="">
+    dpx-buttonode
+    <span class="ver">manual · v0.8.0</span>
+  </a>
+  <nav aria-label="Sections">
+    <a href="#quickstart">quickstart</a>
+    <a href="#hardware">hardware</a>
+    <a href="#deck_splash">deck splash</a>
+    <a href="#modes">modes</a>
+    <a href="#network">network</a>
+    <a href="#dashboard">dashboard</a>
+    <a href="#troubleshooting">troubleshooting</a>
+    <a href="#updates">updates</a>
+  </nav>
+  <a class="gh" href="https://github.com/dubpixel/dpx_buttonode">GitHub ↗</a>
+</header>
+
+<div class="hero" id="top">
+  <span class="eyebrow">user manual — not developer docs</span>
+  <h1>Flash it. Plug in a Stream&nbsp;Deck. Power on.</h1>
+  <p class="lede">
+    dpx-buttonode turns an ARM single-board computer — or a real Raspberry Pi 4/5 — into a
+    <strong>Bitfocus Companion Satellite</strong> node, a full <strong>Bitfocus Companion</strong> instance, or a
+    <strong>Bitfocus Buttons USB Relay</strong>, switchable at runtime with no re-flash. This page covers using a
+    built device day to day. For build pipeline internals, contributing, or CI details, see the
+    <a href="https://github.com/dubpixel/dpx_buttonode#readme">developer README</a>.
+  </p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="https://github.com/dubpixel/dpx_buttonode/releases">Download a release ↗</a>
+    <a class="btn btn-secondary" href="#quickstart">Read the quickstart</a>
+  </div>
+</div>
+
+<main>
+
+  <!-- ================================================================ -->
+  <section class="section" id="quickstart">
+    <div class="section-head">
+      <span class="num">01</span>
+      <h2>Quickstart</h2>
+    </div>
+
+    <p>Three steps, no configuration required for the common case.</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4>1 — Flash</h4>
+        <p>Grab the <code>.img.gz</code> for your board from
+        <a href="https://github.com/dubpixel/dpx_buttonode/releases">Releases</a> and write it with
+        <a href="https://etcher.balena.io/">Balena Etcher</a> (handles the <code>.gz</code> automatically),
+        or <code>dd</code> from a terminal. Pick <strong>lite</strong> (Buttons + Satellite) or
+        <strong>full</strong> (adds Companion itself).</p>
+      </div>
+      <div class="card">
+        <h4>2 — Plug in</h4>
+        <p>Insert the SD card, connect an Elgato Stream Deck via USB, connect Ethernet, then power on.
+        First boot takes roughly 30 seconds.</p>
+      </div>
+      <div class="card">
+        <h4>3 — Done</h4>
+        <p>The device boots into <strong>Satellite mode</strong> by default. Open
+        <a href="https://bitfocus.io/companion">Bitfocus Companion</a> and add it as a Satellite surface —
+        or open <code>http://dpx-buttonode-XXXX.local:8080</code> to configure it.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="label">Hostname</span>
+      Every device gets a stable hostname derived from its Ethernet MAC address:
+      <code>dpx-buttonode-XXXX.local</code>, where <code>XXXX</code> is the last four hex characters of the
+      MAC. The same physical board always gets the same name, so it's safe to bookmark.
+    </div>
+
+    <p>
+      <a class="btn btn-secondary" href="https://github.com/dubpixel/dpx_buttonode/releases">Go to Releases ↗</a>
+    </p>
+  </section>
+
+  <!-- ================================================================ -->
+  <section class="section" id="hardware">
+    <div class="section-head">
+      <span class="num">02</span>
+      <h2>Hardware</h2>
+    </div>
+
+    <p>Two separate build pipelines feed the same on-device software — pick the release that matches
+    your actual board.</p>
+
+    <div class="card-grid">
+      <div class="card mode-buttons">
+        <h4>Non-Pi ARM SBCs</h4>
+        <div class="meta">Armbian base image</div>
+        <p>Rock Pi S, Orange Pi Zero 3, Rock Pi 4B/4B+, Rock S0 — auto-built on every Buttons release.
+        150+ other Armbian-supported boards can be built on demand. These are Rockchip/Allwinner/Amlogic
+        boards; Armbian is built specifically for this hardware family.</p>
+      </div>
+      <div class="card mode-satellite">
+        <h4>Raspberry Pi 4 / 5</h4>
+        <div class="meta">Official Raspberry Pi OS — never Armbian</div>
+        <p>Real Pi hardware runs the official Raspberry Pi OS Lite (64-bit), the same image Raspberry Pi
+        Imager uses — not Armbian's <code>rpi4b</code>/<code>rpi5b</code> dropdown entries. Armbian's Pi
+        support is secondary to the boards it's actually built for, which matters for GPU/HDMI/VideoCore
+        (relevant if you plan to run Dashboard). One universal image covers both Pi 4 and Pi 5.</p>
+      </div>
+    </div>
+
+    <h3>Stream Deck compatibility</h3>
+    <p>Any Elgato Stream Deck supported by the <code>streamdeck</code> Python library works, over USB.
+    The on-device boot splash (below) adapts its layout to the deck's key count — a 2-row Mini shows IP
+    and hostname only, while a 3-row deck (Original, MK.2, XL) unlocks the full stage-then-GO config
+    screen with mode/network controls, SSH password reveal, and the Dashboard toggle key.</p>
+
+    <h3>Companion Dashboard needs a real display</h3>
+    <div class="callout callout-warn">
+      <span class="label">Requires attached HDMI display</span>
+      Companion Dashboard is an X11/Electron kiosk — it needs a real screen with GPU-backed video output.
+      It will not run usefully on a headless board with no display attached (e.g. a Rock Pi S doing
+      Buttons-relay duty in a rack). See <a href="#dashboard">Dashboard</a> below for the low-RAM warning
+      threshold as well.
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section class="section" id="deck_splash">
+    <div class="section-head">
+      <span class="num">03</span>
+      <h2>The Stream Deck config screen</h2>
+      <span class="tag">stage → review → GO</span>
+    </div>
+
+    <p>Before Buttons, Satellite, or Companion claims the attached Stream Deck, the device draws a
+    live configuration screen directly onto its keys — no web UI or SSH required for first setup.
+    Everything you press <strong>stages</strong> a pending change; nothing is actually applied to the
+    system until you press <strong>GO</strong>. This is deliberate: a single mis-press of MODE or NET
+    can't switch anything by itself.</p>
+
+    <div class="deck-diagram" role="img" aria-label="Stream Deck key layout: row 0 is four IP octet keys plus the port; row 1 is the hostname plus Dashboard status; row 2 is MODE, NET, SUBNET, SSH, and GO">
+      <div class="deck-key k-octet">octet 1</div>
+      <div class="deck-key k-octet">octet 2</div>
+      <div class="deck-key k-octet">octet 3</div>
+      <div class="deck-key k-octet">octet 4</div>
+      <div class="deck-key blank">:8080</div>
+
+      <div class="deck-key k-host">hostname</div>
+      <div class="deck-key k-host">segment</div>
+      <div class="deck-key k-host">.local</div>
+      <div class="deck-key blank"> </div>
+      <div class="deck-key k-dash">D</div>
+
+      <div class="deck-key k-mode">MODE</div>
+      <div class="deck-key k-net">NET</div>
+      <div class="deck-key k-subnet">SUBNET</div>
+      <div class="deck-key k-ssh">SSH</div>
+      <div class="deck-key k-go">GO</div>
+    </div>
+
+    <div class="key-legend">
+      <div class="row">
+        <span class="key-name">MODE</span>
+        <span>Short press cycles the <em>pending</em> mode candidate: Buttons → Satellite → Companion
+        (skips Companion if the Full variant isn't installed). Shown as a colored label (BTN/SAT/CMP).
+        Never commits by itself.</span>
+      </div>
+      <div class="row">
+        <span class="key-name">NET</span>
+        <span>Short press toggles the pending network choice between DHCP and STATIC, shown as the actual
+        word. Never commits by itself.</span>
+      </div>
+      <div class="row">
+        <span class="key-name">SUBNET</span>
+        <span>Cycles the pending prefix length through <code>/24 → /22 → /16 → /8</code>. Only meaningful
+        when STATIC is staged, but harmless to change regardless.</span>
+      </div>
+      <div class="row">
+        <span class="key-name">octets</span>
+        <span>The four IP-octet keys in the top row are editable <strong>only</strong> while STATIC is
+        staged. Hold one down to spin its value 0–255; release to lock it in. While DHCP is staged, these
+        keys are locked and dimmed — there's nothing to build a static address out of.</span>
+      </div>
+      <div class="row">
+        <span class="key-name">SSH</span>
+        <span><strong>Press-to-toggle reveal</strong>, not always-on-display. At rest it shows a neutral
+        "SSH" hint. Press it once and it shows the actual random root password generated at first boot;
+        press again to hide it. This is the <em>only</em> place that password is ever shown — not the web
+        UI — because revealing it should require physically being at the device, not just LAN access. Goes
+        blank once you've set a real password from the web UI's SSH tab. Only present on decks with 5 or
+        more columns.</span>
+      </div>
+      <div class="row">
+        <span class="key-name">GO</span>
+        <span>The <strong>only</strong> key that actually changes anything. One press commits everything
+        currently staged as a single combined operation: a mode switch if the candidate differs from the
+        active mode, and a network change if DHCP/STATIC differs from the live state. Flashes a checkmark
+        to confirm the press registered — the deck's screen typically goes dark for a moment right after,
+        because switching modes restarts the service that owns the USB device.</span>
+      </div>
+      <div class="row">
+        <span class="key-name">D</span>
+        <span>Only shown if Companion Dashboard is installed on this image. Press-to-toggle: turns
+        Dashboard on or off directly from the device, no web UI needed. Red when Dashboard is actually
+        running, dark gray when installed but off — it reflects real service state, not just "was it
+        toggled on."</span>
+      </div>
+    </div>
+
+    <p>The rest of the screen is informational: the live DHCP/static IP address across the four octet
+    keys (plus the web UI's port, <code>:8080</code>, alongside them), and the device's mDNS hostname
+    spelled out across the second row.</p>
+  </section>
+
+  <!-- ================================================================ -->
+  <section class="section" id="modes">
+    <div class="section-head">
+      <span class="num">04</span>
+      <h2>Switching modes</h2>
+    </div>
+
+    <p>All three modes are installed on every image (Companion only on the Full variant) — switching is
+    instant and requires no re-flash. Use the deck's MODE + GO keys, or the web UI's <strong>Mode</strong>
+    tab at <code>http://dpx-buttonode-XXXX.local:8080</code>.</p>
+
+    <div class="card-grid">
+      <div class="card mode-buttons">
+        <span class="chip chip-buttons">Buttons</span>
+        <h4>USB Relay mode</h4>
+        <p>Runs <a href="https://bitfocus.io/buttons">Bitfocus Buttons USB Relay</a>, exposing the attached
+        Stream Deck as a physical relay controller. Announces itself on port 3040 via mDNS — Buttons finds
+        it automatically, no configuration needed for most setups.</p>
+      </div>
+      <div class="card mode-satellite">
+        <span class="chip chip-satellite">Satellite</span>
+        <h4>Companion Satellite mode</h4>
+        <p>Connects outbound to a running Bitfocus Companion instance elsewhere on the network and exposes
+        the Stream Deck as a remote surface. Needs Companion v3.4.0+ with <em>Settings → Surfaces → Enable
+        Satellite</em> turned on, and TCP port 16622 reachable. Set the Companion server IP/port from the
+        Mode tab. <strong>This is the default mode on a fresh image.</strong></p>
+      </div>
+      <div class="card mode-companion">
+        <span class="chip chip-companion">Companion</span>
+        <h4>Full Companion mode</h4>
+        <p>Runs full <a href="https://bitfocus.io/companion">Bitfocus Companion</a> itself on the device —
+        only available on the <strong>full</strong> image variant. Companion's own web UI runs on port
+        8000. Useful for a standalone, all-in-one control surface with no separate Companion host needed.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="label">A stuck mode after a crash still shows "already active"</span>
+      The persisted mode file (<code>/etc/dpx-mode</code>) records intent, not live state — if a mode's
+      service dies (a crash, or a reboot right after one), the device now checks whether the service is
+      actually running before treating "same mode selected" as nothing-to-do, and relaunches it. If you're
+      on a build older than this fix and a mode seems dead, re-select it and press GO (or use the Mode
+      tab's Switch button) again — it'll restart the service either way.
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section class="section" id="network">
+    <div class="section-head">
+      <span class="num">05</span>
+      <h2>Network</h2>
+    </div>
+
+    <p>DHCP is the default. Static IP is available from either the deck or the web UI, and both persist
+    across reboots.</p>
+
+    <h3>From the Stream Deck</h3>
+    <ol>
+      <li>Press <strong>NET</strong> to stage <code>STATIC</code>.</li>
+      <li>Press <strong>SUBNET</strong> to cycle to the prefix length you want (<code>/24</code>,
+      <code>/22</code>, <code>/16</code>, or <code>/8</code>).</li>
+      <li>Hold each octet key to spin its value; release to lock it in.</li>
+      <li>Press <strong>GO</strong> to commit.</li>
+    </ol>
+
+    <h3>From the web UI</h3>
+    <p>Open the <strong>Network</strong> tab and switch between DHCP and static there instead. After an
+    IP change, navigate to the new address directly — the mDNS hostname
+    (<code>dpx-buttonode-XXXX.local</code>) resolves again within a few seconds.</p>
+
+    <div class="callout callout-fixed">
+      <span class="label">Fixed — network settings not persisting</span>
+      An earlier build had network settings fail to survive a reboot on some Armbian boards using
+      NetworkManager instead of systemd-networkd. This is resolved — settings written from either the deck
+      or the web UI now persist correctly across reboots on all supported boards.
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section class="section" id="dashboard">
+    <div class="section-head">
+      <span class="num">06</span>
+      <h2>Companion Dashboard</h2>
+    </div>
+
+    <p><a href="https://github.com/tomhillmeyer/companion-dashboard">Companion Dashboard</a> is an opt-in
+    kiosk display that runs alongside whatever mode is currently active (Buttons, Satellite, or Companion),
+    on units with a real HDMI display attached. It's installed on every image but disabled by default.</p>
+
+    <h3>Enable it</h3>
+    <ol>
+      <li>Open the web UI's <strong>Mode</strong> tab, find the Companion Dashboard section, and click
+      <strong>Turn On</strong> — or press the deck's <strong>D</strong> key if your deck has one.</li>
+      <li>Dashboard boots into its own first-run screen on the attached display. Point it at your
+      Companion instance from there — Dashboard manages its own connection settings independently of this
+      project.</li>
+      <li>Use <strong>Toggle Fullscreen</strong> in the web UI to send F11 into the running kiosk remotely
+      — no keyboard needed at the physical display.</li>
+    </ol>
+
+    <div class="callout callout-warn">
+      <span class="label">Needs a real display, and real RAM</span>
+      Dashboard needs an attached HDMI display with GPU-backed video output — it will not work on a
+      headless board. A non-blocking warning appears in the web UI on boards reporting under 1&nbsp;GB of
+      RAM: Dashboard's X11/Electron stack needs real headroom to run reliably alongside a mode service.
+      It's still your call whether to enable it in that case — the warning just sets expectations.
+    </div>
+
+    <div class="callout callout-fixed">
+      <span class="label">Fixed — Dashboard not surviving a reboot</span>
+      An earlier build had Dashboard's autostart flag not persist correctly, so it wouldn't come back after
+      a reboot even when it had been turned on. This is fixed — Dashboard's on/off state now survives
+      reboots, and the deck's <strong>D</strong> key reflects the service's actual running state rather
+      than just whether it was toggled on.
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section class="section" id="troubleshooting">
+    <div class="section-head">
+      <span class="num">07</span>
+      <h2>Troubleshooting</h2>
+      <span class="tag">real fixes from real hardware</span>
+    </div>
+
+    <p>Everything below was found and fixed on physical devices, not simulated. Items marked
+    <span class="status-pill status-fixed">fixed</span> should not recur on a current build; items marked
+    <span class="status-pill status-open">known issue</span> are open as of the current recommended
+    release (v0.8.0).</p>
+
+    <div class="gotcha">
+      <div class="gotcha-head">
+        <h4>Stream Deck not picked up after a mode switch</h4>
+        <span class="status-pill status-fixed">fixed</span>
+      </div>
+      <p>After heavy mode-switch activity, the kernel could still see the Stream Deck (bound to
+      <code>hid-generic</code>) while udev never (re)created its <code>/dev/hidraw*</code> device node —
+      invisible to Companion's hidraw-only driver even though libusb-based tools (the deck splash,
+      Satellite) still worked fine. The fix re-triggers udev (<code>udevadm trigger</code> for both the HID
+      and USB subsystems) automatically before every mode's service starts, which resolves this without a
+      physical replug in the common case. If a Stream Deck still doesn't show up in Companion after
+      switching to Companion mode, try the web UI's <strong>Devices</strong> tab, which offers a manual USB
+      power-cycle as a fallback.</p>
+    </div>
+
+    <div class="gotcha">
+      <div class="gotcha-head">
+        <h4>Network settings not surviving a reboot</h4>
+        <span class="status-pill status-fixed">fixed</span>
+      </div>
+      <p>On Armbian boards using NetworkManager rather than systemd-networkd, a static IP or DHCP choice
+      set from the deck or web UI could silently revert on the next boot. Persistence now works correctly
+      across both network stacks. If you're still seeing this, confirm your build is current — it should
+      not reproduce on the recommended release.</p>
+    </div>
+
+    <div class="gotcha">
+      <div class="gotcha-head">
+        <h4>Dashboard didn't come back after a reboot</h4>
+        <span class="status-pill status-fixed">fixed</span>
+      </div>
+      <p>See the callout in the <a href="#dashboard">Dashboard section</a> above — the autostart flag now
+      persists correctly, and the deck's D key shows the service's real running state.</p>
+    </div>
+
+    <div class="gotcha">
+      <div class="gotcha-head">
+        <h4>The deck seems stuck / unresponsive</h4>
+      </div>
+      <p>The Stream Deck's screen isn't live video — it holds whatever image was last drawn. A few things
+      to check, in order:</p>
+      <ul>
+        <li><strong>It just switched modes.</strong> A successful GO press restarts whichever service now
+        owns the device, which briefly (and sometimes visibly) claims the USB connection. Give it a few
+        seconds — the splash screen only comes back if a mode isn't currently claiming the deck.</li>
+        <li><strong>A mode is already active.</strong> Once Buttons, Satellite, or Companion has claimed
+        the Stream Deck, the boot splash intentionally steps aside — that's expected, not a hang. Use the
+        web UI to change settings at that point instead of the deck.</li>
+        <li><strong>Genuinely unresponsive keys.</strong> Try a physical USB replug. If that doesn't help,
+        the web UI's Devices tab has a USB power-cycle action as a further fallback.</li>
+      </ul>
+    </div>
+
+    <div class="gotcha">
+      <div class="gotcha-head">
+        <h4>D key doesn't reliably launch Dashboard or reflect its state</h4>
+        <span class="status-pill status-open">known issue — #17</span>
+      </div>
+      <p>On the current recommended release, the deck's D key can be unreliable about actually launching
+      Dashboard or showing its true running state. If pressing D doesn't seem to work, use the web UI's
+      Mode tab toggle instead — it's the more reliable path for now.</p>
+    </div>
+
+    <div class="gotcha">
+      <div class="gotcha-head">
+        <h4>Splash-recovery hasn't been deliberately crash-tested</h4>
+        <span class="status-pill status-open">known issue — #11</span>
+      </div>
+      <p>The mechanism that brings the boot splash screen back after a mode's service dies is live and
+      running in production, but hasn't yet been put through a deliberate crash/reboot test. It's expected
+      to work; if you hit a case where the splash doesn't reappear after a service actually goes down,
+      that's useful information for an issue report.</p>
+    </div>
+
+    <div class="gotcha">
+      <div class="gotcha-head">
+        <h4>Can't get in over SSH</h4>
+      </div>
+      <p>SSH ships <strong>disabled</strong> with no hardcoded credential. On first boot a random root
+      password is generated automatically — the <em>only</em> place it's ever shown is the Stream Deck's
+      SSH key (press to reveal, press again to hide). If you don't have a deck attached, connect one
+      temporarily just long enough to read the password, enable SSH and set your own password from the web
+      UI's SSH tab, then disconnect if you like. There is currently no remote way to recover the generated
+      password by design — see the web UI's <strong>SSH</strong> tab and the
+      <a href="https://github.com/dubpixel/dpx_buttonode#ssh-into-the-device">README's SSH section</a> for
+      the full model.</p>
+    </div>
+
+    <p style="margin-top: 1.4rem;">
+      Didn't find your issue here? Check the
+      <a href="https://github.com/dubpixel/dpx_buttonode/releases">latest release notes</a> for the
+      current known-issues list, or
+      <a href="https://github.com/dubpixel/dpx_buttonode/issues">open an issue</a>.
+    </p>
+  </section>
+
+  <!-- ================================================================ -->
+  <section class="section" id="updates">
+    <div class="section-head">
+      <span class="num">08</span>
+      <h2>Updates</h2>
+    </div>
+
+    <p>Every device can update itself in place from the web UI's <strong>Updates</strong> tab — no re-flash
+    needed for routine updates.</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4>Web UI</h4>
+        <p>Updates the config interface itself (<code>dpx-buttonode-ui.py</code>) in place.</p>
+      </div>
+      <div class="card">
+        <h4>Buttons</h4>
+        <p>Pulls the latest mirrored Bitfocus Buttons USB Relay package and reinstalls it.</p>
+      </div>
+      <div class="card">
+        <h4>Satellite</h4>
+        <p>Rebuilds Companion Satellite from source via the official installer.</p>
+      </div>
+      <div class="card">
+        <h4>Companion</h4>
+        <p>Full-variant only. Companion's real update source is Bitfocus's own hosted package API — the
+        Updates tab checks and applies from there directly, not from GitHub.</p>
+      </div>
+    </div>
+
+    <p>Open the <strong>Updates</strong> tab, check for a new version of whichever component you're
+    interested in, and apply it. The device stays on its current mode and settings through the process.</p>
+  </section>
+
+</main>
+
+<footer>
+  <div class="inner">
+    <span>dpx-buttonode — broadcast infrastructure tooling by <a href="https://dubpixel.tv">dubpixel</a></span>
+    <div class="links">
+      <a href="https://github.com/dubpixel/dpx_buttonode">Repository</a>
+      <a href="https://github.com/dubpixel/dpx_buttonode#readme">Developer README</a>
+      <a href="https://github.com/dubpixel/dpx_buttonode/releases">Releases</a>
+      <a href="https://github.com/dubpixel/dpx_buttonode/issues">Issues</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// Copy buttons for code blocks
+document.querySelectorAll('pre').forEach(function (pre) {
+  var btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.type = 'button';
+  btn.textContent = 'copy';
+  btn.addEventListener('click', function () {
+    var text = pre.innerText.replace(/^copy$/m, '').trim();
+    navigator.clipboard && navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = 'copied';
+      btn.classList.add('copied');
+      setTimeout(function () { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1400);
+    });
+  });
+  pre.appendChild(btn);
+});
+
+// Highlight the active section in the nav while scrolling
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll('.topbar nav a'));
+  var sections = links.map(function (a) { return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+  if (!sections.length) return;
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      var link = links[sections.indexOf(entry.target)];
+      if (!link) return;
+      if (entry.isIntersecting) {
+        links.forEach(function (l) { l.classList.remove('active'); });
+        link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  sections.forEach(function (s) { io.observe(s); });
+})();
+</script>
+
+</body>
+</html>

@@ -68,6 +68,12 @@
   <img src="images/009_deck_splash.jpg" alt="dpx-buttonode running on real hardware — Stream Deck config screen" width="600">
 </div>
 
+<div align="center">
+
+> **📖 Read the user manual: [dubpixel.github.io/dpx_buttonode](https://dubpixel.github.io/dpx_buttonode/)**
+
+</div>
+
    <br />
 <!-- TABLE OF CONTENTS -->
 <details>
