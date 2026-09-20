@@ -41,19 +41,31 @@
     <a href="https://github.com/dubpixel/dpx_buttonode#readme">developer README</a>.
   </p>
   <div class="cta-row">
-    <a class="btn btn-primary" href="https://github.com/dubpixel/dpx_buttonode/releases">Download a release ↗</a>
     <a class="btn btn-secondary" href="#quickstart">Read the quickstart</a>
+  </div>
+
+  <div class="release-banner" id="releaseBanner">
+    <div class="release-banner-head">
+      <span class="release-dot" aria-hidden="true"></span>
+      <span class="release-label">Latest recommended release</span>
+      <span class="release-version" id="releaseVersion">checking…</span>
+      <span class="release-date" id="releaseDate"></span>
+      <a class="release-all-link" href="https://github.com/dubpixel/dpx_buttonode/releases">all releases ↗</a>
+    </div>
+    <div class="release-assets" id="releaseAssets">
+      <span class="release-loading">looking up the latest build…</span>
+    </div>
   </div>
 </div>
 
 <main>
 
   <!-- ================================================================ -->
-  <section class="section" id="quickstart">
-    <div class="section-head">
+  <details class="section" id="quickstart" name="manual-section" open>
+    <summary class="section-head">
       <span class="num">01</span>
       <h2>Quickstart</h2>
-    </div>
+    </summary>
 
     <p>Three steps, no configuration required for the common case.</p>
 
@@ -89,14 +101,14 @@
     <p>
       <a class="btn btn-secondary" href="https://github.com/dubpixel/dpx_buttonode/releases">Go to Releases ↗</a>
     </p>
-  </section>
+  </details>
 
   <!-- ================================================================ -->
-  <section class="section" id="hardware">
-    <div class="section-head">
+  <details class="section" id="hardware" name="manual-section">
+    <summary class="section-head">
       <span class="num">02</span>
       <h2>Hardware</h2>
-    </div>
+    </summary>
 
     <p>Two separate build pipelines feed the same on-device software — pick the release that matches
     your actual board.</p>
@@ -133,15 +145,15 @@
       Buttons-relay duty in a rack). See <a href="#dashboard">Dashboard</a> below for the low-RAM warning
       threshold as well.
     </div>
-  </section>
+  </details>
 
   <!-- ================================================================ -->
-  <section class="section" id="deck_splash">
-    <div class="section-head">
+  <details class="section" id="deck_splash" name="manual-section">
+    <summary class="section-head">
       <span class="num">03</span>
       <h2>The Stream Deck config screen</h2>
       <span class="tag">stage → review → GO</span>
-    </div>
+    </summary>
 
     <p>Before Buttons, Satellite, or Companion claims the attached Stream Deck, the device draws a
     live configuration screen directly onto its keys — no web UI or SSH required for first setup.
@@ -221,14 +233,14 @@
     <p>The rest of the screen is informational: the live DHCP/static IP address across the four octet
     keys (plus the web UI's port, <code>:8080</code>, alongside them), and the device's mDNS hostname
     spelled out across the second row.</p>
-  </section>
+  </details>
 
   <!-- ================================================================ -->
-  <section class="section" id="modes">
-    <div class="section-head">
+  <details class="section" id="modes" name="manual-section">
+    <summary class="section-head">
       <span class="num">04</span>
       <h2>Switching modes</h2>
-    </div>
+    </summary>
 
     <p>All three modes are installed on every image (Companion only on the Full variant) — switching is
     instant and requires no re-flash. Use the deck's MODE + GO keys, or the web UI's <strong>Mode</strong>
@@ -267,14 +279,14 @@
       on a build older than this fix and a mode seems dead, re-select it and press GO (or use the Mode
       tab's Switch button) again — it'll restart the service either way.
     </div>
-  </section>
+  </details>
 
   <!-- ================================================================ -->
-  <section class="section" id="network">
-    <div class="section-head">
+  <details class="section" id="network" name="manual-section">
+    <summary class="section-head">
       <span class="num">05</span>
       <h2>Network</h2>
-    </div>
+    </summary>
 
     <p>DHCP is the default. Static IP is available from either the deck or the web UI, and both persist
     across reboots.</p>
@@ -299,14 +311,14 @@
       NetworkManager instead of systemd-networkd. This is resolved — settings written from either the deck
       or the web UI now persist correctly across reboots on all supported boards.
     </div>
-  </section>
+  </details>
 
   <!-- ================================================================ -->
-  <section class="section" id="dashboard">
-    <div class="section-head">
+  <details class="section" id="dashboard" name="manual-section">
+    <summary class="section-head">
       <span class="num">06</span>
       <h2>Companion Dashboard</h2>
-    </div>
+    </summary>
 
     <p><a href="https://github.com/tomhillmeyer/companion-dashboard">Companion Dashboard</a> is an opt-in
     kiosk display that runs alongside whatever mode is currently active (Buttons, Satellite, or Companion),
@@ -338,15 +350,15 @@
       reboots, and the deck's <strong>D</strong> key reflects the service's actual running state rather
       than just whether it was toggled on.
     </div>
-  </section>
+  </details>
 
   <!-- ================================================================ -->
-  <section class="section" id="troubleshooting">
-    <div class="section-head">
+  <details class="section" id="troubleshooting" name="manual-section">
+    <summary class="section-head">
       <span class="num">07</span>
       <h2>Troubleshooting</h2>
       <span class="tag">real fixes from real hardware</span>
-    </div>
+    </summary>
 
     <p>Everything below was found and fixed on physical devices, not simulated. Items marked
     <span class="status-pill status-fixed">fixed</span> should not recur on a current build; items marked
@@ -447,14 +459,14 @@
       current known-issues list, or
       <a href="https://github.com/dubpixel/dpx_buttonode/issues">open an issue</a>.
     </p>
-  </section>
+  </details>
 
   <!-- ================================================================ -->
-  <section class="section" id="updates">
-    <div class="section-head">
+  <details class="section" id="updates" name="manual-section">
+    <summary class="section-head">
       <span class="num">08</span>
       <h2>Updates</h2>
-    </div>
+    </summary>
 
     <p>Every device can update itself in place from the web UI's <strong>Updates</strong> tab — no re-flash
     needed for routine updates.</p>
@@ -481,7 +493,7 @@
 
     <p>Open the <strong>Updates</strong> tab, check for a new version of whichever component you're
     interested in, and apply it. The device stays on its current mode and settings through the process.</p>
-  </section>
+  </details>
 
 </main>
 
@@ -515,6 +527,65 @@ document.querySelectorAll('pre').forEach(function (pre) {
   });
   pre.appendChild(btn);
 });
+
+// Fetch the latest recommended release and render direct download buttons
+(function () {
+  var versionEl = document.getElementById('releaseVersion');
+  var dateEl = document.getElementById('releaseDate');
+  var assetsEl = document.getElementById('releaseAssets');
+  if (!versionEl || !assetsEl) return;
+
+  function boardLabel(name) {
+    if (/^rpi4-5-|raspios/i.test(name)) return 'Raspberry Pi 4/5';
+    if (/^rockpi-s-/i.test(name)) return 'Rock Pi S';
+    if (/^rockpi-4bplus-/i.test(name)) return 'Rock Pi 4B+';
+    if (/^rockpi-4b-/i.test(name)) return 'Rock Pi 4B';
+    if (/^rock-s0-/i.test(name)) return 'Rock S0';
+    if (/^orangepizero3-/i.test(name)) return 'Orange Pi Zero 3';
+    return name.split('-dpx-buttonode-')[0] || name;
+  }
+  function variantLabel(name) {
+    return /-full-/i.test(name) ? 'Full' : 'Lite';
+  }
+
+  fetch('https://api.github.com/repos/dubpixel/dpx_buttonode/releases/latest')
+    .then(function (r) {
+      if (!r.ok) throw new Error('status ' + r.status);
+      return r.json();
+    })
+    .then(function (data) {
+      versionEl.textContent = data.tag_name || 'latest';
+      if (dateEl && data.published_at) {
+        var d = new Date(data.published_at);
+        dateEl.textContent = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      }
+      var assets = (data.assets || []).filter(function (a) {
+        return /\.(img\.gz|zip|tar\.gz)$/i.test(a.name);
+      });
+      assetsEl.innerHTML = '';
+      if (!assets.length) {
+        var fallback = document.createElement('a');
+        fallback.className = 'release-asset-btn';
+        fallback.href = data.html_url || 'https://github.com/dubpixel/dpx_buttonode/releases';
+        fallback.textContent = 'View release ↗';
+        assetsEl.appendChild(fallback);
+        return;
+      }
+      assets.forEach(function (a) {
+        var btn = document.createElement('a');
+        btn.className = 'release-asset-btn';
+        btn.href = a.browser_download_url;
+        var mb = (a.size / (1024 * 1024)).toFixed(0);
+        btn.innerHTML = boardLabel(a.name) + ' <span class="release-asset-variant">' + variantLabel(a.name) +
+          '</span> <span class="release-asset-size">' + mb + ' MB</span>';
+        assetsEl.appendChild(btn);
+      });
+    })
+    .catch(function () {
+      versionEl.textContent = 'unavailable';
+      assetsEl.innerHTML = '<a class="release-asset-btn" href="https://github.com/dubpixel/dpx_buttonode/releases">Go to Releases ↗</a>';
+    });
+})();
 
 // Highlight the active section in the nav while scrolling
 (function () {

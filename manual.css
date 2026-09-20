@@ -277,6 +277,90 @@ code, pre, kbd {
 .btn-secondary { background: var(--surface); color: var(--ink); border-color: var(--line); }
 .btn-secondary:hover { border-color: var(--accent); color: var(--accent-strong); }
 
+/* ── release banner ─────────────────────────────────────────────────── */
+
+.release-banner {
+  margin-top: 1.6rem;
+  padding: 1rem 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.release-banner-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.8rem;
+}
+.release-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--sat);
+  flex-shrink: 0;
+}
+.release-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+.release-version {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+.release-date {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-faint);
+}
+.release-all-link {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+.release-assets {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.release-loading {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--ink-faint);
+}
+.release-asset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 9px;
+}
+.release-asset-btn:hover { background: var(--accent-strong); }
+.release-asset-variant {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.22);
+  padding: 0.05rem 0.4rem;
+  border-radius: 5px;
+}
+.release-asset-size {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+
 /* ── layout / sections ──────────────────────────────────────────────── */
 
 main {
@@ -285,12 +369,16 @@ main {
   padding: 0 1.5rem 5rem;
 }
 
-section.section {
+details.section {
   padding-top: 2.6rem;
+  padding-bottom: 0.4rem;
   scroll-margin-top: 4.5rem;
 }
-section.section + section.section {
+details.section + details.section {
   border-top: 1px solid var(--line-soft);
+}
+details.section[open] {
+  padding-bottom: 2.6rem;
 }
 
 .section-head {
@@ -299,6 +387,27 @@ section.section + section.section {
   gap: 0.7rem;
   margin-bottom: 1.3rem;
   flex-wrap: wrap;
+  cursor: pointer;
+  list-style: none;
+}
+.section-head::-webkit-details-marker { display: none; }
+.section-head::marker { content: ''; }
+.section-head::after {
+  content: '';
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-left: auto;
+  border-right: 2px solid var(--ink-faint);
+  border-bottom: 2px solid var(--ink-faint);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+details.section[open] > .section-head::after {
+  transform: rotate(45deg);
+}
+.section-head:hover .num,
+.section-head:hover h2 {
+  color: var(--accent-strong);
 }
 .section-head .num {
   font-family: var(--font-mono);

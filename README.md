@@ -34,7 +34,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/dubpixel/dpx_buttonode?label=dpx-buttonode&color=blue&style=flat-square)](https://github.com/dubpixel/dpx_buttonode/releases/latest)
 </div>
 <div align="center">
-<h1 align="center"><a href="https://github.com/dubpixel/dpx_buttonode"><img src="images/logo.png" alt="dpx logo" height="52" valign="middle"></a> dpx-buttonode</h1>
+<h1 align="center"><a href="https://github.com/dubpixel/dpx_buttonode"><img src="images/logo.png" alt="dpx logo" height="52" align="middle"></a> dpx-buttonode</h1>
 <h3 align="center"><i>One image, three <a href="https://bitfocus.io/companion">Bitfocus Companion</a> modes — flash any ARM SBC or real Raspberry Pi 4/5, switch between <a href="https://github.com/bitfocus/companion-satellite">Satellite</a>, full Companion, or <a href="https://bitfocus.io/buttons">Buttons USB Relay</a> from the browser</i></h3>
   <p align="center">
     Automated GitHub Actions build pipeline that produces ready-to-flash <code>.img.gz</code> images —
