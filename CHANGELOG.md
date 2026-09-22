@@ -338,64 +338,12 @@ only surfaced, none of which a successful build would have caught.
 - `dpx-buttonode.pkr.hcl` — Packer build definition targeting ARM64 Armbian images
 - Initial support for Bitfocus Buttons USB Relay Headless v0.1.0-beta.4
 
----
-
-## Version Guidelines
-
-### Semantic Versioning (MAJOR.MINOR.PATCH)
-
-- **MAJOR**: Breaking changes, incompatible API modifications
-- **MINOR**: New features, backwards-compatible additions
-- **PATCH**: Bug fixes, documentation updates, typos
-
-### Change Categories
-
-- **Added**: New features or capabilities
-- **Changed**: Changes to existing functionality
-- **Deprecated**: Features marked for future removal (still working)
-- **Removed**: Removed features or functionality
-- **Fixed**: Bug fixes
-- **Security**: Security patches or vulnerability fixes
-
-### Example Entry Format
-
-```markdown
-## [1.2.0] - 2026-03-15
-
-### Added
-- New authentication system with JWT tokens
-- Export functionality for CSV and JSON formats
-- Dark mode toggle in user preferences
-
-### Changed
-- Improved database query performance by 40%
-- Updated UI library from v2.1 to v3.0
-
-### Fixed
-- Fixed memory leak in background worker process
-- Corrected timezone handling in date picker component
-
-### Security
-- Patched XSS vulnerability in user input validation
-```
-
-### Version Comparison Links
-
-Add these at the bottom of the file (replace with your repo owner/name):
-
-```markdown
-[Unreleased]: https://github.com/owner/repo/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/owner/repo/releases/tag/v0.1.0
-```
-
----
-
-## Tips for Maintaining This Changelog
-
-1. **Update as you work**: Add entries when making changes, not at release time
-2. **Keep it scannable**: Use clear, concise descriptions
-3. **Link to issues/PRs**: Include `(#123)` references when relevant
-4. **Date format**: Use ISO 8601 (YYYY-MM-DD)
-5. **Group by type**: Keep all Added items together, all Fixed items together, etc.
-6. **User perspective**: Write what changed for users, not implementation details
-7. **Unreleased section**: Keep active changes here, move to version section on release
+[Unreleased]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/dubpixel/dpx_buttonode/releases/tag/v0.1.0
