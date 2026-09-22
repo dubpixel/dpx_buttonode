@@ -886,6 +886,30 @@ jobs:
 
 Any board in [Armbian's supported hardware list](https://www.armbian.com/download/) works. Look up the board's `BOARD=` ID from the Armbian docs or the [supported boards list](https://github.com/armbian/build/blob/main/config/boards).
 
+---
+
+#### Targeting real Raspberry Pi hardware instead of Armbian
+
+The recipe above is Armbian-specific. For real Pi 4/5 hardware, this project downloads the official
+Raspberry Pi OS Lite (64-bit) image directly instead of building one — same base-image role, but the
+Packer chroot stage stays identical (see `.github/workflows/raspios-builder.yaml`). A few things differ
+enough that they'll bite you if you assume Armbian's behavior carries over:
+
+- **Two partitions, not one.** Raspberry Pi OS ships boot + root; set `image_mounts = ["/boot", "/"]`
+  or the `arm-image` plugin fails with `"error different of partitions than expected"` (gotcha #17).
+- **`systemctl disable --now <svc>` hard-fails inside the chroot** on Raspberry Pi OS Trixie's newer
+  systemd (`--now cannot be used when systemd is not running`). Armbian's older systemd silently
+  no-ops it. Drop `--now` — it's meaningless at build time anyway (gotcha #18).
+- **`userconfig.service` and cloud-init both stall first boot** waiting for input/a datasource that
+  will never come, unless masked in the chroot (gotchas #21, #22).
+- **Python 3.13 removed the stdlib `crypt`/`spwd` modules** (PEP 594). Any provisioning script that
+  does `import crypt` will crash-loop silently on a current Raspberry Pi OS image — this looked
+  identical to a hung boot from the outside for most of a debugging session before the real cause
+  turned up in `journalctl` (gotcha #25).
+
+Full details and how each was diagnosed live on real hardware are in `AGENTS.md`'s gotchas list
+(#17–25).
+
 </details>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
