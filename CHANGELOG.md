@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.1] - 2026-10-04
+
+### Fixed
+- Deck splash (`dpx-deck-splash.py`) never drew anything on a genuinely
+  fresh first boot (before DHCP assigns an IP), and could stay blank
+  after any reconnect (replug, or the Stop/showsplash key) if the IP
+  hadn't changed since the prior connection — both traced to a stale
+  `last_ip` comparison living outside the reconnect loop. Found live on
+  a unit's actual first boot; fix is code-reviewed and logic-verified
+  but not yet re-confirmed on hardware (see PR for why).
+- Precompile `dpx-deck-splash`'s venv bytecode at image-build time
+  instead of paying that cost on the device's first-ever boot.
+- Corrected a stale docstring in `dpx-deck-splash.py` describing the
+  old (wrong) hidraw permission model from before gotcha #12a.
+
+---
+
 ## [0.8.0] - 2026-08-30
 
 Real Raspberry Pi 4/5 support via a genuine Raspberry Pi OS build pipeline
@@ -338,7 +355,8 @@ only surfaced, none of which a successful build would have caught.
 - `dpx-buttonode.pkr.hcl` — Packer build definition targeting ARM64 Armbian images
 - Initial support for Bitfocus Buttons USB Relay Headless v0.1.0-beta.4
 
-[Unreleased]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.5.0...v0.6.0
