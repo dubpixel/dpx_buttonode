@@ -67,12 +67,15 @@ a dedicated venv at /opt/dpx-deck-splash/venv, installed by
 scripts/install-deck-splash.sh, so they never touch the system Python used
 by dpx-buttonode-ui.py.
 
-Requires: `buttons` group membership (inherited hidraw permission via the
-udev rule the Buttons .deb installs: KERNEL=="hidraw*",
-ATTRS{idVendor}=="0fd9", GROUP="buttons") — this only works if hidapi is
-using the hidraw backend, not the libusb backend. See
-scripts/install-deck-splash.sh for the specific apt package that enforces
-this.
+Requires: `buttons` group membership, but NOT via the Buttons .deb's own
+hidraw udev rule (KERNEL=="hidraw*", GROUP="buttons") — that rule is
+irrelevant here. The `streamdeck` PyPI package (0.9.8) ships exactly one
+real transport (StreamDeck/Transport/LibUSBHIDAPI.py), so this needs
+libusb-level access to /dev/bus/usb/*, granted by a separate udev rule
+(/etc/udev/rules.d/61-dpx-deck-splash.rules, also GROUP="buttons") that
+install-deck-splash.sh installs specifically for this. See that script
+and gotcha #12a in AGENTS.md for the full story of why the hidraw
+assumption was wrong.
 """
 
 import re
@@ -703,8 +706,10 @@ def toggle_dashboard(deck, key, state):
         draw_dashboard_key(deck, key)
 
 
+_NO_DRAW_YET = object()  # sentinel, never equal to None or any IP string
+
+
 def run_splash_loop():
-    last_ip = None
     while True:
         decks = DeviceManager().enumerate()
         if not decks:
@@ -730,6 +735,22 @@ def run_splash_loop():
             }
             deck.set_key_callback(make_key_callback(state))
             print(f"dpx-deck-splash: opened {deck.deck_type()} ({deck.key_count()} keys)")
+            # Reset per connection, not once at process start: deck.reset()
+            # just above blanks the physical screen on EVERY fresh open
+            # (first boot, a replug, or stepping back from a mode via the
+            # Stop/showsplash key) -- but this was `last_ip = None` at
+            # module/process scope, outside this loop entirely, so a
+            # reconnect where the IP happens to be unchanged (the common
+            # case) hit `ip != last_ip` -> False and skipped the redraw,
+            # leaving the just-reset blank screen on display instead of
+            # the actual splash. On a genuinely fresh first boot specifically,
+            # this was worse: before DHCP assigns anything, get_ip() also
+            # returns None, so even the very first-ever draw was skipped
+            # (None != None -> False) and the deck never drew a single
+            # frame until an IP showed up. Found live 2026-10-04 on a
+            # unit's actual first boot. The sentinel forces the first
+            # comparison after every (re)connection to always be True.
+            last_ip = _NO_DRAW_YET
             while True:
                 ip = get_ip()
                 if ip != last_ip:

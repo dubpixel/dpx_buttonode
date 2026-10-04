@@ -41,6 +41,23 @@ python3 -m venv /opt/dpx-deck-splash/venv
 # ── Script + user ────────────────────────────────────────────────────────────
 install -m 0755 /tmp/dpx-deck-splash.py /usr/local/bin/dpx-deck-splash.py
 
+# Precompile bytecode for the venv + the script itself at image-build time.
+# `pip install` does NOT leave .pyc files behind (verified: zero exist right
+# after a fresh install) -- without this, the device's first-ever boot pays
+# the full compile cost for streamdeck/Pillow/their deps inside
+# dpx-deck-splash.service's startup, on top of this being the one boot with
+# the most first-boot-only provisioning overhead (hostname, SSH password
+# gen, mDNS) competing for the same CPU/disk. That delay is enough for
+# satellite.service's Before=/Conflicts= ordering against this unit to not
+# help: Before= only orders the START JOB, not "finished initializing" --
+# Type=simple has no readiness handshake -- so satellite can claim the
+# Stream Deck's USB handle while this service is still importing/compiling,
+# and both writing to the same HID endpoint at once is what produces a
+# strobing/garbled splash on first boot specifically (never caught before
+# because every prior test rebooted an already-booted device with a warm
+# .pyc cache).
+/opt/dpx-deck-splash/venv/bin/python3 -m compileall -q /opt/dpx-deck-splash/venv/lib /usr/local/bin/dpx-deck-splash.py
+
 # Low-priv user, `buttons` group only — never runs as root.
 if ! id -u dpx-splash >/dev/null 2>&1; then
     adduser --system --no-create-home --shell /usr/sbin/nologin dpx-splash
