@@ -1968,6 +1968,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(data)
             else:
                 self.send_response(404); self.end_headers()
+        elif path == "/debug-logs":
+            # Emergency diagnostic endpoint -- added live 2026-10-06 to debug
+            # a deck-splash/satellite USB-claim failure with no other way in
+            # (SSH locked out, no retrievable root password). Deliberately
+            # unauthenticated, same as every other read-only endpoint on
+            # this page -- this whole web UI has zero auth by design.
+            def _run_text(cmd):
+                try:
+                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                    return (r.stdout or "") + (r.stderr or "")
+                except Exception as e:
+                    return f"[failed to run {cmd}: {e}]"
+            sections = [
+                ("journalctl -u dpx-deck-splash (last 150)",
+                 _run_text(["journalctl", "-u", "dpx-deck-splash", "--no-pager", "-n", "150"])),
+                ("journalctl -u satellite (last 100)",
+                 _run_text(["journalctl", "-u", "satellite", "--no-pager", "-n", "100"])),
+                ("journalctl -u dpx-mode-select (last 50)",
+                 _run_text(["journalctl", "-u", "dpx-mode-select", "--no-pager", "-n", "50"])),
+                ("dmesg (last 120, usb/hid only)",
+                 _run_text(["bash", "-c", "dmesg | tail -300 | grep -iE 'usb|hid|streamdeck' | tail -120"])),
+                ("lsusb", _run_text(["lsusb"])),
+                ("systemctl status dpx-deck-splash", _run_text(["systemctl", "status", "dpx-deck-splash", "--no-pager"])),
+                ("systemctl status satellite", _run_text(["systemctl", "status", "satellite", "--no-pager"])),
+            ]
+            body = "\n\n".join(f"===== {title} =====\n{content}" for title, content in sections)
+            data = body.encode("utf-8", errors="replace")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
         else:
             self.html("<html><body><h1>Not found</h1></body></html>", 404)
 
