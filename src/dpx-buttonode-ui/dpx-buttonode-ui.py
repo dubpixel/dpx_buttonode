@@ -1428,15 +1428,25 @@ def _download_url(url, timeout=15):
         return None
 
 
-def _validate_python_file(data, sentinel):
+def _validate_python_file(data, sentinel, dest_path):
     """Cheap pre-check (size + a known-stable sentinel string) followed by
     a real `python3 -m py_compile` on a temp copy — catches truncated
     downloads and syntax errors the sentinel alone wouldn't. Returns
     (ok: bool, tmp_path or None). Caller is responsible for cleaning up
-    tmp_path on the success path (it gets consumed by os.replace())."""
+    tmp_path on the success path (it gets consumed by os.replace()).
+
+    `dest_path` is the live file this download will eventually replace --
+    the temp file MUST be staged in that same directory, not /tmp. /tmp is
+    tmpfs (a different filesystem) on this image, and os.replace() across
+    filesystems raises OSError: Invalid cross-device link, unconditionally,
+    every time, regardless of network conditions. That exception was never
+    caught anywhere in this chain, so it crashed the request handler with
+    zero bytes written -- indistinguishable from the network just dropping
+    the connection. Confirmed live 2026-10-06 while chasing what looked
+    like a flaky-network symptom but wasn't."""
     if not data or len(data) < 1000 or sentinel.encode() not in data:
         return False, None
-    tmp_path = Path(f"/tmp/dpx-update-{os.getpid()}-{int(time.time())}.py")
+    tmp_path = dest_path.with_name(f".{dest_path.name}.update-{os.getpid()}-{int(time.time())}")
     tmp_path.write_bytes(data)
     _, _, rc = run(["python3", "-m", "py_compile", str(tmp_path)])
     if rc != 0:
@@ -1479,11 +1489,21 @@ def apply_dpx_update():
     swapped = []
     for url, live_path, sentinel in files:
         data = _download_url(url)
-        ok, tmp_path = _validate_python_file(data, sentinel)
+        ok, tmp_path = _validate_python_file(data, sentinel, live_path)
         if not ok:
             return False, f"Failed to download/validate {live_path.name} — nothing was changed" if not swapped \
                 else f"Failed to download/validate {live_path.name} — {swapped[0]} was already updated, the other was not"
-        _backup_and_replace(live_path, tmp_path)
+        try:
+            _backup_and_replace(live_path, tmp_path)
+        except Exception as e:
+            # Was previously uncaught -- os.replace() raising here (e.g. a
+            # cross-filesystem rename) crashed the request handler with
+            # zero bytes written, which looked exactly like a dropped
+            # network connection from the client side. Never again:
+            # report it as a real error instead.
+            tmp_path.unlink(missing_ok=True)
+            return False, f"Failed to install {live_path.name}: {e}" if not swapped \
+                else f"Failed to install {live_path.name}: {e} — {swapped[0]} was already updated, the other was not"
         swapped.append(live_path.name)
 
     _update_release_field("DPX_VERSION", status["latest"])
