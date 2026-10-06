@@ -139,6 +139,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
 
     steps:
       - name: Checkout repository
@@ -180,3 +181,20 @@ jobs:
             --notes-file /tmp/release-notes.md \
             release-assets/*.img.gz \
             /tmp/buttons-version.txt
+
+      # Once the images are attached to the release as real assets, the
+      # raw CI artifacts this job downloaded from `build` serve no purpose
+      # -- delete them immediately rather than let retention-days expire
+      # them on GitHub's own timeline (issue #18: found 12.1GiB of already-
+      # expired-but-uncollected artifacts sitting around, silently
+      # billing against the account's Actions storage cap).
+      - name: Delete this run's CI artifacts (now redundant with the release)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --jq '.artifacts[].id' | while read -r id; do
+            echo "Deleting artifact $id"
+            gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true
+          done
