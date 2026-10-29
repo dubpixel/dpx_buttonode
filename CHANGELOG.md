@@ -9,6 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0] - 2026-10-28
+
+Three real fixes that landed on `fix/deck-splash-first-boot-blank` after
+0.8.1 shipped, without a version bump at the time — found live during a
+field incident, documented here retroactively.
+
+### Added
+- `/debug-logs` diagnostic endpoint on the web UI — dumps `journalctl`
+  for `dpx-deck-splash`/`satellite`/`dpx-mode-select`, usb/hid `dmesg`
+  lines, `lsusb`, and systemd status for both services as plain text.
+  Added live with no other way into a locked-out unit (SSH inaccessible,
+  no HDMI) — unauthenticated, same as every other read endpoint on this
+  page.
+
+### Fixed
+- **Self-update crashed on every single attempt.** `apply_dpx_update()`
+  staged its downloaded temp file under `/tmp`, then tried to
+  `os.replace()` it into `/usr/local/bin/` — but `/tmp` is tmpfs, a
+  different filesystem from `/usr/local/bin`'s root ext4 on this image,
+  so the rename raised `OSError: Invalid cross-device link`
+  unconditionally, with nothing catching it. The exception crashed the
+  request handler with zero bytes written, which looked identical to the
+  network just dropping the connection — and was mistaken for exactly
+  that for several attempts before being traced to the real cause. Fixed
+  by staging the temp file in the same directory as its destination.
+- **The actual root cause of a "nothing shows on the deck" field
+  incident:** `dpx-mode-select.service` (added for issue #12, "start
+  system automatically") defaulted to auto-resuming the persisted mode
+  on every boot. On a fresh flash, that means jumping straight into
+  Satellite before anyone's configured a Companion host — Satellite
+  starts "successfully" per systemd, shows nothing, and nothing falls
+  back to the splash screen. That broke the one guarantee the splash
+  exists for: reading a unit's IP off its own screen with no SSH/web UI
+  needed. Confirmed against a real field unit (commit `8080ce3`, predates
+  `dpx-mode-select.service` entirely) that's been reliable for weeks
+  specifically because it has no auto-resume — splash is simply always
+  enabled, and a mode only starts on an explicit GO press. Fixed by
+  pre-seeding `/var/lib/dpx-mode-autostart-disabled` on fresh images,
+  restoring that proven-safe default. The Mode tab checkbox still lets
+  anyone opt into auto-resume.
+
+---
+
 ## [0.8.1] - 2026-10-04
 
 ### Fixed
@@ -355,7 +398,8 @@ only surfaced, none of which a successful build would have caught.
 - `dpx-buttonode.pkr.hcl` — Packer build definition targeting ARM64 Armbian images
 - Initial support for Bitfocus Buttons USB Relay Headless v0.1.0-beta.4
 
-[Unreleased]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/dubpixel/dpx_buttonode/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.6.0...v0.7.0
