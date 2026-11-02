@@ -187,7 +187,21 @@ def get_net_info():
             k, _, v = line.partition(":")
             if k == "ipv4.method" and v == "manual": info["mode"] = "static"
             elif k == "ipv4.addresses" and v: info["ip_cidr"] = v
-            elif k == "ipv4.gateway": info["gateway"] = v
+            # `and v` guard, matching the other fields here -- without it,
+            # this unconditionally overwrote get_gateway()'s correct live
+            # routing-table read with nmcli's STATIC PROFILE value, which
+            # is empty by design on a DHCP (ipv4.method=auto) connection
+            # (the gateway is assigned at runtime, never written into the
+            # saved profile). That silently blanked `gateway` on every
+            # Raspberry Pi OS / NetworkManager box in DHCP mode, which
+            # made pin_static() (the deck's only static-IP path -- it has
+            # no way to type a gateway, it only reuses whatever's already
+            # detected) refuse with "No gateway detected" -- invisibly,
+            # since the deck has nowhere to show that message. The web
+            # UI's static form "worked" only because typing a gateway
+            # bypasses this detection entirely. Found live 2026-11-02
+            # (Josh/@jkoffman, Pi 4/5 build).
+            elif k == "ipv4.gateway" and v: info["gateway"] = v
             elif k == "ipv4.dns" and v: info["dns"] = v.split(",")[0]
         return info
 

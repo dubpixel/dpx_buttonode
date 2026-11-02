@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.1] - 2026-11-02
+
+### Fixed
+- Static IP via the Stream Deck silently refused to apply on Raspberry Pi
+  OS / NetworkManager boards. `get_net_info()`'s `nmcli` gateway parsing
+  unconditionally overwrote the correct live-routing-table gateway with
+  `nmcli connection show`'s **static profile** value, which is empty by
+  design on a DHCP connection (the gateway is assigned at runtime, never
+  saved to the profile). That left `pin_static()` — the deck's only
+  static-IP path, which has no way to type a gateway and only reuses
+  whatever's already detected — refusing with "No gateway detected,"
+  invisibly, since the deck has nowhere to show that message. The web
+  UI's static form worked only because typing a gateway bypasses this
+  detection entirely. Found live (Josh/@jkoffman, Pi 4/5 build).
+
+---
+
 ## [0.9.0] - 2026-10-28
 
 Three real fixes that landed on `fix/deck-splash-first-boot-blank` after
@@ -398,7 +415,8 @@ only surfaced, none of which a successful build would have caught.
 - `dpx-buttonode.pkr.hcl` — Packer build definition targeting ARM64 Armbian images
 - Initial support for Bitfocus Buttons USB Relay Headless v0.1.0-beta.4
 
-[Unreleased]: https://github.com/dubpixel/dpx_buttonode/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/dubpixel/dpx_buttonode/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/dubpixel/dpx_buttonode/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.7.0...v0.8.0
