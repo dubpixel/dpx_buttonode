@@ -86,7 +86,7 @@ xset s off
 xset s noblank
 unclutter -idle 0.5 -root &
 openbox-session &
-exec companion-dashboard --kiosk --no-sandbox
+exec companion-dashboard --kiosk-mode --no-sandbox
 XINITRC
 chmod +x "$DASH_HOME/.xinitrc"
 
@@ -113,7 +113,7 @@ chown -R dpx-dashboard:dpx-dashboard "$DASH_HOME"
 cat > /etc/systemd/system/dpx-dashboard.service << 'UNIT'
 [Unit]
 Description=Companion Dashboard Display Service
-After=network-online.target graphical.target
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -129,7 +129,7 @@ StandardOutput=journal
 StandardError=journal
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target
 UNIT
 
 systemctl daemon-reload

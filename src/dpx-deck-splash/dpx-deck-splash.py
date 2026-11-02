@@ -67,12 +67,15 @@ a dedicated venv at /opt/dpx-deck-splash/venv, installed by
 scripts/install-deck-splash.sh, so they never touch the system Python used
 by dpx-buttonode-ui.py.
 
-Requires: `buttons` group membership (inherited hidraw permission via the
-udev rule the Buttons .deb installs: KERNEL=="hidraw*",
-ATTRS{idVendor}=="0fd9", GROUP="buttons") — this only works if hidapi is
-using the hidraw backend, not the libusb backend. See
-scripts/install-deck-splash.sh for the specific apt package that enforces
-this.
+Requires: `buttons` group membership, but NOT via the Buttons .deb's own
+hidraw udev rule (KERNEL=="hidraw*", GROUP="buttons") — that rule is
+irrelevant here. The `streamdeck` PyPI package (0.9.8) ships exactly one
+real transport (StreamDeck/Transport/LibUSBHIDAPI.py), so this needs
+libusb-level access to /dev/bus/usb/*, granted by a separate udev rule
+(/etc/udev/rules.d/61-dpx-deck-splash.rules, also GROUP="buttons") that
+install-deck-splash.sh installs specifically for this. See that script
+and gotcha #12a in AGENTS.md for the full story of why the hidraw
+assumption was wrong.
 """
 
 import re
@@ -295,6 +298,39 @@ def render_key(deck, text, font_size=16, bg=(0, 0, 0), fg="white"):
     w = bbox[2] - bbox[0]
     pos = ((image.width - w) / 2, (image.height - h) / 2)
     draw.text(pos, text, font=font, fill=fg)
+    return PILHelper.to_native_key_format(deck, image)
+
+
+def render_password_key(deck, password, bg=(0, 0, 0), fg="white", chunk=4):
+    """Like render_key(), but wraps `password` into fixed-width chunks
+    (default 4 chars) on separate stacked lines instead of shrinking one
+    line to fit the whole string. A 10-char password on a single line
+    shrinks small enough that similar-looking characters (5 vs S, 0 vs O)
+    become genuinely hard to tell apart on the deck's tiny screen --
+    confirmed live 2026-09-06, misread as a transcription error while
+    reading it off. Wrapping means each line only has to fit `chunk`
+    characters, so the font can stay much larger."""
+    image = PILHelper.create_key_image(deck)
+    draw = ImageDraw.Draw(image)
+    if bg != (0, 0, 0):
+        draw.rectangle([(0, 0), image.size], fill=bg)
+    lines = [password[i:i + chunk] for i in range(0, len(password), chunk)]
+    margin = image.width * 0.12
+    size = 24
+    while size > 7:
+        font = load_font(size)
+        widths = [draw.textbbox((0, 0), line, font=font)[2] for line in lines]
+        line_h = draw.textbbox((0, 0), "Ag", font=font)[3]
+        total_h = line_h * len(lines)
+        if max(widths) <= image.width - margin and total_h <= image.height - margin:
+            break
+        size -= 1
+    y = (image.height - line_h * len(lines)) / 2
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        w = bbox[2] - bbox[0]
+        draw.text(((image.width - w) / 2, y), line, font=font, fill=fg)
+        y += line_h
     return PILHelper.to_native_key_format(deck, image)
 
 
@@ -636,7 +672,7 @@ def make_key_callback(state):
                 return  # nothing left to reveal — password already changed
             state["ssh_revealed"] = not state.get("ssh_revealed", False)
             if state["ssh_revealed"]:
-                deck.set_key_image(key, render_key(deck, pw, font_size=13, bg=SSH_PW_COLOR))
+                deck.set_key_image(key, render_password_key(deck, pw, bg=SSH_PW_COLOR))
             else:
                 draw_ssh_key(deck, key)
             return
@@ -703,8 +739,10 @@ def toggle_dashboard(deck, key, state):
         draw_dashboard_key(deck, key)
 
 
+_NO_DRAW_YET = object()  # sentinel, never equal to None or any IP string
+
+
 def run_splash_loop():
-    last_ip = None
     while True:
         decks = DeviceManager().enumerate()
         if not decks:
@@ -730,6 +768,22 @@ def run_splash_loop():
             }
             deck.set_key_callback(make_key_callback(state))
             print(f"dpx-deck-splash: opened {deck.deck_type()} ({deck.key_count()} keys)")
+            # Reset per connection, not once at process start: deck.reset()
+            # just above blanks the physical screen on EVERY fresh open
+            # (first boot, a replug, or stepping back from a mode via the
+            # Stop/showsplash key) -- but this was `last_ip = None` at
+            # module/process scope, outside this loop entirely, so a
+            # reconnect where the IP happens to be unchanged (the common
+            # case) hit `ip != last_ip` -> False and skipped the redraw,
+            # leaving the just-reset blank screen on display instead of
+            # the actual splash. On a genuinely fresh first boot specifically,
+            # this was worse: before DHCP assigns anything, get_ip() also
+            # returns None, so even the very first-ever draw was skipped
+            # (None != None -> False) and the deck never drew a single
+            # frame until an IP showed up. Found live 2026-10-04 on a
+            # unit's actual first boot. The sentinel forces the first
+            # comparison after every (re)connection to always be True.
+            last_ip = _NO_DRAW_YET
             while True:
                 ip = get_ip()
                 if ip != last_ip:
