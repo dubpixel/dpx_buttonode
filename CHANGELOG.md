@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.2] - 2026-11-09
+
+### Fixed
+- **Dashboard status (`D`) key on the deck splash went stale when
+  Dashboard was toggled from somewhere other than the key itself** (web
+  UI, or Dashboard crash-looping on its own) — issue #17's "doesn't
+  reflect the running state" half. `run_splash_loop()`'s redraw was
+  gated entirely on the IP changing; Dashboard's live state was never
+  independently re-polled, so the key's color only ever updated as a
+  side effect of an unrelated IP redraw or a deck reconnect. Fixed by
+  polling `dashboard_active()` on the same `REFRESH_SECONDS` cadence as
+  the IP check, redrawing only on an actual state change. The D key's
+  "doesn't launch Dashboard" half of #17 was already fixed in `56baa75`
+  (toggle wiring) — this closes the remaining known gap.
+- Issue #11's fix (event-driven splash recovery via `OnFailure=` drop-ins
+  + `dpx-mode-select.service`, both already in `install-deck-splash.sh`
+  since `dcd21db`) is still unverified on real hardware — no code change
+  needed here, just a real boot-cycle + forced-failure test once a
+  fresh-from-this-commit image is flashed.
+
+---
+
 ## [0.9.1] - 2026-11-02
 
 ### Fixed

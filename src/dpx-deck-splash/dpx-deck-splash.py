@@ -737,6 +737,7 @@ def toggle_dashboard(deck, key, state):
     finally:
         state["dashboard_busy"] = False
         draw_dashboard_key(deck, key)
+        state["dashboard_last_drawn"] = dashboard_active()
 
 
 _NO_DRAW_YET = object()  # sentinel, never equal to None or any IP string
@@ -767,6 +768,8 @@ def run_splash_loop():
                 "ssh_revealed": False,
             }
             deck.set_key_callback(make_key_callback(state))
+            dash_key = dashboard_key_index(deck)
+            state["dashboard_last_drawn"] = _NO_DRAW_YET
             print(f"dpx-deck-splash: opened {deck.deck_type()} ({deck.key_count()} keys)")
             # Reset per connection, not once at process start: deck.reset()
             # just above blanks the physical screen on EVERY fresh open
@@ -789,7 +792,20 @@ def run_splash_loop():
                 if ip != last_ip:
                     draw_splash(deck, ip, get_mdns_name(), state)
                     last_ip = ip
+                    if dash_key is not None:
+                        state["dashboard_last_drawn"] = dashboard_active()
                     print(f"dpx-deck-splash: displaying ip={ip}")
+                # Dashboard's running state can change out from under this
+                # screen (toggled from the web UI, or crash-looping on its
+                # own) without the IP ever changing, so draw_splash's own
+                # ip-gated redraw never catches it (dpx#17 -- the D key
+                # going stale). Polled independently, same REFRESH_SECONDS
+                # cadence, only redrawn on an actual state change.
+                if dash_key is not None:
+                    on = dashboard_active()
+                    if on != state["dashboard_last_drawn"]:
+                        draw_dashboard_key(deck, dash_key)
+                        state["dashboard_last_drawn"] = on
                 time.sleep(REFRESH_SECONDS)
         except Exception as e:
             # Most likely cause: Buttons/Satellite/Companion just claimed
