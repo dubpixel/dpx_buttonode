@@ -29,8 +29,7 @@ been merged and deleted — `main` is current, not stale. Work directly off
 - Persistent web UI status bar, Uptime/RAM Status cards.
 
 **Open issues:**
-- Issue #3: `/label` self-printed QR label page (planned, not started)
-- Issue #4: make Full variant opt-in on automated releases (`build-full`
+- Issue #23: make Full variant opt-in on automated releases (`build-full`
   boolean input on `release-action.yaml` so cron only builds Lite)
 - Issue #6: cross-platform support — the Raspberry Pi OS half is now
   shipped; the Armbian-board-audit half (verify beyond `rockpi-s`) is
