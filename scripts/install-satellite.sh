@@ -67,6 +67,24 @@ echo "==> satellite user added to 'buttons' group (HID device access)"
 echo "satellite" > /etc/dpx-mode
 echo "==> /etc/dpx-mode: satellite (default)"
 
+# ── Default mode-autostart to DISABLED on fresh images ─────────────────────────
+# dpx-mode-select.service (install-deck-splash.sh) auto-resumes the
+# persisted mode on every boot unless this marker exists -- but a mode
+# that starts "successfully" per systemd (process is up) can still show
+# nothing at all on the deck (e.g. Satellite with no Companion host
+# configured yet, which is the literal state of every fresh flash). The
+# splash screen exists specifically so a fresh unit never needs SSH/web UI
+# just to read its own IP off the deck -- auto-resuming over it by default
+# broke that guarantee. Confirmed against a real field unit running an
+# older pre-dpx-mode-select build (8080ce3): that one has no auto-resume
+# at all, splash is simply always enabled, and it's been reliable for
+# weeks precisely because of that. Pre-seeding this marker restores that
+# proven-safe default on a fresh image; the Mode tab checkbox still lets
+# anyone opt back into auto-resume if they actually want it.
+mkdir -p /var/lib
+touch /var/lib/dpx-mode-autostart-disabled
+echo "==> mode-autostart: disabled by default (splash shows first; opt-in via Mode tab)"
+
 # ── Record satellite version in build metadata ────────────────────────────────
 SAT_VERSION=$(/opt/fnm/aliases/default/bin/node -e \
   "console.log(require('/opt/companion-satellite/satellite/package.json').version)" 2>/dev/null || echo "unknown")

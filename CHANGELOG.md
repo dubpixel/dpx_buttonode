@@ -9,6 +9,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.1] - 2026-11-02
+
+### Fixed
+- Static IP via the Stream Deck silently refused to apply on Raspberry Pi
+  OS / NetworkManager boards. `get_net_info()`'s `nmcli` gateway parsing
+  unconditionally overwrote the correct live-routing-table gateway with
+  `nmcli connection show`'s **static profile** value, which is empty by
+  design on a DHCP connection (the gateway is assigned at runtime, never
+  saved to the profile). That left `pin_static()` — the deck's only
+  static-IP path, which has no way to type a gateway and only reuses
+  whatever's already detected — refusing with "No gateway detected,"
+  invisibly, since the deck has nowhere to show that message. The web
+  UI's static form worked only because typing a gateway bypasses this
+  detection entirely. Found live (Josh/@jkoffman, Pi 4/5 build).
+
+---
+
+## [0.9.0] - 2026-10-28
+
+Three real fixes that landed on `fix/deck-splash-first-boot-blank` after
+0.8.1 shipped, without a version bump at the time — found live during a
+field incident, documented here retroactively.
+
+### Added
+- `/debug-logs` diagnostic endpoint on the web UI — dumps `journalctl`
+  for `dpx-deck-splash`/`satellite`/`dpx-mode-select`, usb/hid `dmesg`
+  lines, `lsusb`, and systemd status for both services as plain text.
+  Added live with no other way into a locked-out unit (SSH inaccessible,
+  no HDMI) — unauthenticated, same as every other read endpoint on this
+  page.
+
+### Fixed
+- **Self-update crashed on every single attempt.** `apply_dpx_update()`
+  staged its downloaded temp file under `/tmp`, then tried to
+  `os.replace()` it into `/usr/local/bin/` — but `/tmp` is tmpfs, a
+  different filesystem from `/usr/local/bin`'s root ext4 on this image,
+  so the rename raised `OSError: Invalid cross-device link`
+  unconditionally, with nothing catching it. The exception crashed the
+  request handler with zero bytes written, which looked identical to the
+  network just dropping the connection — and was mistaken for exactly
+  that for several attempts before being traced to the real cause. Fixed
+  by staging the temp file in the same directory as its destination.
+- **The actual root cause of a "nothing shows on the deck" field
+  incident:** `dpx-mode-select.service` (added for issue #12, "start
+  system automatically") defaulted to auto-resuming the persisted mode
+  on every boot. On a fresh flash, that means jumping straight into
+  Satellite before anyone's configured a Companion host — Satellite
+  starts "successfully" per systemd, shows nothing, and nothing falls
+  back to the splash screen. That broke the one guarantee the splash
+  exists for: reading a unit's IP off its own screen with no SSH/web UI
+  needed. Confirmed against a real field unit (commit `8080ce3`, predates
+  `dpx-mode-select.service` entirely) that's been reliable for weeks
+  specifically because it has no auto-resume — splash is simply always
+  enabled, and a mode only starts on an explicit GO press. Fixed by
+  pre-seeding `/var/lib/dpx-mode-autostart-disabled` on fresh images,
+  restoring that proven-safe default. The Mode tab checkbox still lets
+  anyone opt into auto-resume.
+
+---
+
+## [0.8.1] - 2026-10-04
+
+### Fixed
+- Deck splash (`dpx-deck-splash.py`) never drew anything on a genuinely
+  fresh first boot (before DHCP assigns an IP), and could stay blank
+  after any reconnect (replug, or the Stop/showsplash key) if the IP
+  hadn't changed since the prior connection — both traced to a stale
+  `last_ip` comparison living outside the reconnect loop. Found live on
+  a unit's actual first boot; fix is code-reviewed and logic-verified
+  but not yet re-confirmed on hardware (see PR for why).
+- Precompile `dpx-deck-splash`'s venv bytecode at image-build time
+  instead of paying that cost on the device's first-ever boot.
+- Corrected a stale docstring in `dpx-deck-splash.py` describing the
+  old (wrong) hidraw permission model from before gotcha #12a.
+
+---
+
 ## [0.8.0] - 2026-08-30
 
 Real Raspberry Pi 4/5 support via a genuine Raspberry Pi OS build pipeline
@@ -338,7 +415,10 @@ only surfaced, none of which a successful build would have caught.
 - `dpx-buttonode.pkr.hcl` — Packer build definition targeting ARM64 Armbian images
 - Initial support for Bitfocus Buttons USB Relay Headless v0.1.0-beta.4
 
-[Unreleased]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/dubpixel/dpx_buttonode/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/dubpixel/dpx_buttonode/compare/v0.9.0...v0.9.1
+[0.9.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.1...v0.9.0
+[0.8.1]: https://github.com/dubpixel/dpx_buttonode/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/dubpixel/dpx_buttonode/compare/v0.5.0...v0.6.0
